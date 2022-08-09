@@ -1,7 +1,7 @@
 name: audio_stream
-description: A new Flutter plugin project.
+description: A simple multi-platform audio stream player for raw audio data streams.
 version: 0.0.1
-homepage:
+repository: https://github.com/reki2000/audio_stream
 
 environment:
   sdk: ">=2.17.5 <3.0.0"
@@ -24,15 +24,10 @@ dev_dependencies:
 flutter:
   plugin:
     platforms:
-      android:
-        ffiPlugin: true
-      ios:
-        ffiPlugin: true
       linux:
-        ffiPlugin: true
-      macos:
         ffiPlugin: true
       windows:
         ffiPlugin: true
       web:
-        
+
+

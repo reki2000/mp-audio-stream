@@ -1,6 +1,3 @@
-[submodule "native/miniaudio"]
-	path = native/miniaudio
-	url = https://github.com/mackron/miniaudio.git
 [submodule "src/miniaudio"]
 	path = src/miniaudio
 	url = https://github.com/mackron/miniaudio.git

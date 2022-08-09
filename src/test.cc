@@ -1,5 +1,3 @@
-#define EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -7,17 +5,10 @@
 #include <chrono>
 #include <thread>
 
-EXPORT
-int ma_stream_init();
-
-EXPORT
-void ma_stream_uninit();
-
-EXPORT
-void ma_stream_push(float*, int);
+#include <audio_stream.h>
 
 int main() {
-    ma_stream_init();
+    ma_stream_init(128*1024, 2*1024, 1, 44100);
 
     int bufLength = 44100;
 

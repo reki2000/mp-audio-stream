@@ -6,21 +6,26 @@ import 'package:ffi/ffi.dart';
 
 import '../audio_stream.dart';
 
-typedef _MAInitFunc = Int Function();
-typedef _MAInit = int Function();
+typedef _MAInitFunc = Int Function(Int64, Int64, Int64, Int64);
+typedef _MAInit = int Function(int, int, int, int);
 
-typedef _MAPushFunc = Void Function(Pointer<Float>, Int64);
-typedef _MAPush = void Function(Pointer<Float>, int);
+typedef _MAPushFunc = Int Function(Pointer<Float>, Int64);
+typedef _MAPush = int Function(Pointer<Float>, int);
 
 typedef _MAUninitFunc = Void Function();
 typedef _MAUninit = void Function();
 
+/// Contol class for AudioStream on "not" web platform. Use `getAudioStream()` to get its instance.
 class AudioStreamImpl implements AudioStream {
   late _MAPush _pushFfi;
   late _MAUninit _uninitFfi;
 
   @override
-  Future<int> init() async {
+  int init(
+      {int bufferMilliSec = 3000,
+      int waitingBufferMilliSec = 100,
+      int channels = 1,
+      int sampleRate = 44100}) {
     final dynLib = (Platform.isLinux || Platform.isAndroid)
         ? DynamicLibrary.open("libaudio_stream.so")
         : Platform.isWindows
@@ -41,21 +46,26 @@ class AudioStreamImpl implements AudioStream {
         .lookup<NativeFunction<_MAUninitFunc>>("ma_stream_uninit")
         .asFunction<_MAUninit>();
 
-    return initFfi();
+    return initFfi(bufferMilliSec * sampleRate ~/ 1000,
+        waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate);
   }
 
   @override
-  Future<void> push(Float32List buf) async {
+  int push(Float32List buf) {
     final ffiBuf = calloc<Float>(buf.length);
     for (int i = 0; i < buf.length; i++) {
       ffiBuf[i] = buf[i];
     }
-    _pushFfi(ffiBuf, buf.length);
+    final result = _pushFfi(ffiBuf, buf.length);
     calloc.free(ffiBuf);
+    return result;
   }
 
   @override
-  Future<void> uninit() async {
+  void uninit() {
     _uninitFfi();
   }
+
+  @override
+  void resume() {}
 }

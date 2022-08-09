@@ -50,9 +50,12 @@ class _MyHomePageState extends State<MyHomePage> {
     super.dispose();
   }
 
-  void synthSineWave(int freq, int rate, int sec) {
-    final sineWave = List.generate(
-        sec * rate, (i) => math.sin(2 * math.pi * ((i * freq) % rate) / rate));
+  void synthSineWave(double freq, int rate, double sec) async {
+    // for web, calling `init()` from user-action is needed
+    audioStream.resume();
+
+    final sineWave = List.generate((sec * rate).toInt(),
+        (i) => math.sin(2 * math.pi * ((i * freq) % rate) / rate));
     audioStream.push(Float32List.fromList(sineWave));
   }
 
@@ -67,7 +70,11 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             ElevatedButton(
-                onPressed: () => synthSineWave(440, 44100, 1),
+                onPressed: () {
+                  for (final freq in [261.626, 293.665, 329.628]) {
+                    synthSineWave(freq, 44100, 0.5);
+                  }
+                },
                 child: const Text(
                   'generate sine wave',
                 ))

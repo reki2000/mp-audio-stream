@@ -3,34 +3,28 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "./miniaudio/miniaudio.h"
 
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
-#ifdef WIN32
-    #define EXPORT __declspec(dllexport)
-    #define _Float32 float
-#else
-    #define EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
-#endif
+#include "audio_stream.h"
 
 #define DEVICE_FORMAT       ma_format_f32
-#define DEVICE_CHANNELS     1
-#define DEVICE_SAMPLE_RATE  44100
 
-#define MA_STREAM_BUF_SIZE_MAX (128 * 1024)
-#define MA_STREAM_WAIT_BUF_SIZE (2 * 1024)
-
-_Float32 *_ma_stream_buf;
-ma_uint32 _ma_stream_buf_length;
+_Float32 *_ma_stream_buf = NULL;
+ma_uint32 _ma_stream_buf_end;
 ma_uint32 _ma_stream_buf_start;
+
+ma_uint32 _ma_stream_max_buf_size = 128 * 1024;
+ma_uint32 _ma_stream_keep_buf_size = 2 * 1024;
 
 ma_device _ma_stream_device;
 
+bool _ma_stream_initialized = false;
+
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
-    // printf("callback: frameCount:%d _start:%d _length:%d\n", frameCount, _ma_stream_buf_start, _ma_stream_buf_length);
-    if (_ma_stream_buf_length - _ma_stream_buf_start < frameCount + MA_STREAM_WAIT_BUF_SIZE) {
+#ifdef DEBUG
+    printf("callback: frameCount:%d _start:%d _length:%d\n", frameCount, _ma_stream_buf_start, _ma_stream_buf_length);
+#endif
+    // ignore if not enough waiting buffer remains
+    if (_ma_stream_buf_end - _ma_stream_buf_start < frameCount + _ma_stream_keep_buf_size) {
         return;
     }
 
@@ -40,32 +34,36 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 }
 
 EXPORT
-void ma_stream_push(_Float32* buf, int length) {
-    // printf("push: length:%d _length:%d _start:%d\n", length, _ma_stream_buf_length, _ma_stream_buf_start);
-    // for (int i=0; i<100; i+=10) {
-    //     for (int j=0; j<10; j++) {
-    //         unsigned char *b = (unsigned char *)(&buf[i+j]);
-    //         printf("%02x%02x%02x%02x %f ", *(b+3), *(b+2), *(b+1), *(b+0), buf[i+j]);
-    //     }
-    //     printf("\n");
-    // }
-    // fflush(stdout);
+int ma_stream_push(_Float32* buf, int length) {
+#ifdef DEBUG
+    printf("push: length:%d _length:%d _start:%d\n", length, _ma_stream_buf_length, _ma_stream_buf_start);
+    for (int i=0; i<100; i+=10) {
+        for (int j=0; j<10; j++) {
+            unsigned char *b = (unsigned char *)(&buf[i+j]);
+            printf("%02x%02x%02x%02x %f ", *(b+3), *(b+2), *(b+1), *(b+0), buf[i+j]);
+        }
+        printf("\n");
+    }
+    fflush(stdout);
+#endif
 
-    if (_ma_stream_buf_length > MA_STREAM_BUF_SIZE_MAX) {
-        return;
+    // ignore if no buffer remains
+    if (_ma_stream_buf_end - _ma_stream_buf_start + length > _ma_stream_max_buf_size) {
+        return -1;
     }
 
-    memcpy(_ma_stream_buf, &(_ma_stream_buf[_ma_stream_buf_start]), (_ma_stream_buf_length - _ma_stream_buf_start)*sizeof(float));
-    _ma_stream_buf_length -= _ma_stream_buf_start;
-    _ma_stream_buf_start = 0;
-
-    _ma_stream_buf = (_Float32 *)realloc(_ma_stream_buf, (_ma_stream_buf_length + length)*sizeof(_Float32));
-
-    for (int i=0; i<length; i++) {
-        _ma_stream_buf[_ma_stream_buf_length + i] = buf[i] * 2.0f - 1.0f;
+    // move the waiting buffer to the head of the buffer, if needed
+    if (_ma_stream_buf_end + length > _ma_stream_max_buf_size) {
+        memcpy(_ma_stream_buf, &_ma_stream_buf[_ma_stream_buf_start], (_ma_stream_buf_end - _ma_stream_buf_start)*sizeof(float));
+        _ma_stream_buf_end -= _ma_stream_buf_start;
+        _ma_stream_buf_start = 0;
     }
 
-    _ma_stream_buf_length += length;
+    memcpy(&_ma_stream_buf[_ma_stream_buf_end], buf, length * sizeof(float));
+
+    _ma_stream_buf_end += length;
+
+    return 0;
 }
 
 
@@ -75,14 +73,18 @@ void ma_stream_uninit() {
 }
 
 EXPORT
-int ma_stream_init()
+int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate)
 {
+    if (_ma_stream_initialized) {
+        ma_device_uninit(&_ma_stream_device);
+    }
+
     ma_device_config deviceConfig;
  
     deviceConfig = ma_device_config_init(ma_device_type_playback);
     deviceConfig.playback.format   = DEVICE_FORMAT;
-    deviceConfig.playback.channels = DEVICE_CHANNELS;
-    deviceConfig.sampleRate        = DEVICE_SAMPLE_RATE;
+    deviceConfig.playback.channels = channels;
+    deviceConfig.sampleRate        = sample_rate;
     deviceConfig.dataCallback      = data_callback;
 
     if (ma_device_init(NULL, &deviceConfig, &_ma_stream_device) != MA_SUCCESS) {
@@ -90,10 +92,19 @@ int ma_stream_init()
         return -4;
     }
 
+#ifdef DEBUG
     printf("Device Name: %s\n", _ma_stream_device.playback.name);
+#endif
 
-    _ma_stream_buf = (_Float32 *)malloc(0);
-    _ma_stream_buf_length = 0;
+    _ma_stream_max_buf_size = max_buffer_size;
+    _ma_stream_keep_buf_size = keep_buffer_size;
+
+    if (_ma_stream_buf != NULL) {
+        free(_ma_stream_buf);
+    }
+
+    _ma_stream_buf = (_Float32 *)calloc(_ma_stream_max_buf_size, sizeof(_Float32));
+    _ma_stream_buf_end = 0;
     _ma_stream_buf_start = 0;
 
     if (ma_device_start(&_ma_stream_device) != MA_SUCCESS) {
@@ -101,6 +112,8 @@ int ma_stream_init()
         ma_device_uninit(&_ma_stream_device);
         return -5;
     }
+
+    _ma_stream_initialized = true;
 
     return 0;
 }
