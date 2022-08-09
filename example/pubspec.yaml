@@ -18,7 +18,7 @@ dependencies:
   flutter:
     sdk: flutter
 
-  audio_stream:
+  mp_audio_stream:
     # When depending on this package from a real application you should use:
     #   audio_stream: ^x.y.z
     # See https://dart.dev/tools/pub/dependencies#version-constraints

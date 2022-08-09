@@ -2,7 +2,7 @@ import 'dart:js' as js;
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-import '../audio_stream.dart';
+import '../mp_audio_stream.dart';
 
 String _jsText() => r"""
 (async () => {

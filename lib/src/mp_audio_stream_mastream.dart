@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
-import '../audio_stream.dart';
+import '../mp_audio_stream.dart';
 
 typedef _MAInitFunc = Int Function(Int64, Int64, Int64, Int64);
 typedef _MAInit = int Function(int, int, int, int);
@@ -27,9 +27,9 @@ class AudioStreamImpl implements AudioStream {
       int channels = 1,
       int sampleRate = 44100}) {
     final dynLib = (Platform.isLinux || Platform.isAndroid)
-        ? DynamicLibrary.open("libaudio_stream.so")
+        ? DynamicLibrary.open("libmp_audio_stream.so")
         : Platform.isWindows
-            ? DynamicLibrary.open("audio_stream.dll")
+            ? DynamicLibrary.open("mp_audio_stream.dll")
             : (Platform.isMacOS || Platform.isIOS)
                 ? DynamicLibrary.executable()
                 : DynamicLibrary.executable();

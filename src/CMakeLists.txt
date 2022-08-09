@@ -3,15 +3,15 @@
 # the plugin to fail to compile for some customers of the plugin.
 cmake_minimum_required(VERSION 3.10)
 
-project(audio_stream_library VERSION 0.0.1 LANGUAGES CXX)
+project(mp_audio_stream_library VERSION 0.0.1 LANGUAGES CXX)
 
-add_library(audio_stream SHARED
-  "audio_stream.cc"
+add_library(mp_audio_stream SHARED
+  "mp_audio_stream.cc"
 )
 
-set_target_properties(audio_stream PROPERTIES
-  PUBLIC_HEADER audio_stream.h
-  OUTPUT_NAME "audio_stream"
+set_target_properties(mp_audio_stream PROPERTIES
+  PUBLIC_HEADER mp_audio_stream.h
+  OUTPUT_NAME "mp_audio_stream"
 )
 
-target_compile_definitions(audio_stream PUBLIC DART_SHARED_LIB)
+target_compile_definitions(mp_audio_stream PUBLIC DART_SHARED_LIB)

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import 'package:audio_stream/audio_stream.dart';
+import 'package:mp_audio_stream/mp_audio_stream.dart';
 
 void main() {
   runApp(const MyApp());

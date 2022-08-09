@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:audio_stream/audio_stream.dart';
+import 'package:mp_audio_stream/mp_audio_stream.dart';
 
 void main() async {
   final audioStream = getAudioStream();

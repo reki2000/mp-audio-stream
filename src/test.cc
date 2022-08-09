@@ -5,7 +5,7 @@
 #include <chrono>
 #include <thread>
 
-#include <audio_stream.h>
+#include <mp_audio_stream.h>
 
 int main() {
     ma_stream_init(128*1024, 2*1024, 1, 44100);

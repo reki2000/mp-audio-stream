@@ -3,7 +3,7 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "./miniaudio/miniaudio.h"
 
-#include "audio_stream.h"
+#include "mp_audio_stream.h"
 
 #define DEVICE_FORMAT       ma_format_f32
 

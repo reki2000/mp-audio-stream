@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Project-level configuration.
-set(PROJECT_NAME "audio_stream")
+set(PROJECT_NAME "mp_audio_stream")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
 # Invoke the build for native code shared with the other target platforms.
@@ -15,9 +15,9 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CMAKE_CURRENT_BINARY_DI
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
 # external build triggered from this build file.
-set(audio_stream_bundled_libraries
+set(mp_audio_stream_bundled_libraries
   # Defined in ../src/CMakeLists.txt.
   # This can be changed to accomodate different builds.
-  $<TARGET_FILE:audio_stream>
+  $<TARGET_FILE:mp_audio_stream>
   PARENT_SCOPE
 )
