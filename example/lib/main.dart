@@ -51,7 +51,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void synthSineWave(double freq, int rate, double sec) async {
-    // for web, calling `init()` from user-action is needed
+    // for web, calling `resume()` from user-action is needed
     audioStream.resume();
 
     final sineWave = List.generate((sec * rate).toInt(),

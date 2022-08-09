@@ -1,7 +1,9 @@
 
-A plug-in for multi platform simple audio stream playback with real-time generated audio data streams
+A Flutter plug-in for multi platform simple audio stream playback with real-time generated audio data streams
 
 ## Features
+
+Currently only float32-mono format on Linux, Windows and Web platforms.
 
 - Plays buffered audio data in 44.1kHz continuously until the buffer becomes empty.
 - Playing on Web platform is based on AudioContext and AudioWorkletProcessor.

@@ -1,2 +1,3 @@
 src/miniaudio/*
 !src/miniaudio/miniaudio.h
+!src/miniaudio/LISCENCE
