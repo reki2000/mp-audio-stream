@@ -1,3 +1,7 @@
+## 0.0.3
+
+* android support
+
 ## 0.0.2
 
 * document updates, show miniaudio's license.
