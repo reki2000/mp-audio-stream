@@ -7,7 +7,7 @@
 
 #define DEVICE_FORMAT       ma_format_f32
 
-_Float32 *_ma_stream_buf = NULL;
+float *_ma_stream_buf = NULL;
 ma_uint32 _ma_stream_buf_end;
 ma_uint32 _ma_stream_buf_start;
 
@@ -28,13 +28,13 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
         return;
     }
 
-    memcpy((_Float32 *)pOutput, &(_ma_stream_buf[_ma_stream_buf_start]), frameCount * sizeof(_Float32));
+    memcpy((float *)pOutput, &(_ma_stream_buf[_ma_stream_buf_start]), frameCount * sizeof(float));
 
     _ma_stream_buf_start += frameCount;
 }
 
 EXPORT
-int ma_stream_push(_Float32* buf, int length) {
+int ma_stream_push(float* buf, int length) {
 #ifdef DEBUG
     printf("push: length:%d _length:%d _start:%d\n", length, _ma_stream_buf_length, _ma_stream_buf_start);
     for (int i=0; i<100; i+=10) {
@@ -103,7 +103,7 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
         free(_ma_stream_buf);
     }
 
-    _ma_stream_buf = (_Float32 *)calloc(_ma_stream_max_buf_size, sizeof(_Float32));
+    _ma_stream_buf = (float *)calloc(_ma_stream_max_buf_size, sizeof(float));
     _ma_stream_buf_end = 0;
     _ma_stream_buf_start = 0;
 

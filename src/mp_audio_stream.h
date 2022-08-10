@@ -1,6 +1,5 @@
 #ifdef WIN32
     #define EXPORT extern "C" __declspec(dllexport)
-    #define _Float32 float
 #else
     #define EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
 #endif

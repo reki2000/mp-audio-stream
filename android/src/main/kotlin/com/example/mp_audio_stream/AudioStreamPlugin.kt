@@ -17,7 +17,7 @@ class AudioStreamPlugin: FlutterPlugin, MethodCallHandler {
   private lateinit var channel : MethodChannel
 
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-    channel = MethodChannel(flutterPluginBinding.binaryMessenger, "audio_stream")
+    channel = MethodChannel(flutterPluginBinding.binaryMessenger, "mp_audio_stream")
     channel.setMethodCallHandler(this)
   }
 
