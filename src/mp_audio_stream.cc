@@ -8,8 +8,8 @@
 #define DEVICE_FORMAT       ma_format_f32
 
 float *_ma_stream_buf = NULL;
-ma_uint32 _ma_stream_buf_end;
-ma_uint32 _ma_stream_buf_start;
+ma_uint32 _ma_stream_buf_end = 0;
+ma_uint32 _ma_stream_buf_start = 0;
 
 ma_uint32 _ma_stream_max_buf_size = 128 * 1024;
 
