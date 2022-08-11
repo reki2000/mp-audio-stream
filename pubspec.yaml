@@ -24,7 +24,11 @@ dev_dependencies:
 flutter:
   plugin:
     platforms:
+<<<<<<< Updated upstream
       android:
+=======
+      macos:
+>>>>>>> Stashed changes
         ffiPlugin: true
       linux:
         ffiPlugin: true
