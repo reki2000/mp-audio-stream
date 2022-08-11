@@ -1,3 +1,8 @@
+## 0.1.0
+
+* iOS, macOS support
+* remove 'keep buffer'
+
 ## 0.0.3
 
 * android support

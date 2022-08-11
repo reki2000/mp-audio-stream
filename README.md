@@ -3,11 +3,11 @@ A Flutter plug-in for multi platform simple audio stream playback with real-time
 
 ## Features
 
-Currently only float32-mono format on Android, Linux, Windows and Web platforms.
-
-- Plays buffered audio data in 44.1kHz continuously until the buffer becomes empty.
-- Playing on Web platform is based on AudioContext and AudioWorkletProcessor.
-- Playing on other platforms are based on [miniaudio](https://github.com/mackron/miniaudio.git), an amazing multi-platform audio library.
+- Plays buffered audio data in 44.1kHz continuously until the buffer becomes empty
+- Supported format: float32 single-channel
+- Suppots all flutter platforms: Android, iOS, macOS, Linux, Windows and Web platforms
+  - Web platform is based on WebAudio and `AudioWorkletProcessor`
+  - Other platforms are based on [miniaudio](https://github.com/mackron/miniaudio.git), an amazing multi-platform audio library
 
 ## Getting started
 
@@ -41,3 +41,5 @@ void main() async {
   audioStream.uninit();
 }
 ```
+
+For more API Documents, visit [pub.dev](https://pub.dev/packages/mp_audio_stream).
