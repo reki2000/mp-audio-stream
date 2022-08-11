@@ -20,8 +20,8 @@ bool _ma_stream_initialized = false;
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
-#ifdef DEBUG
-    printf("callback: frameCount:%d _start:%d _length:%d\n", frameCount, _ma_stream_buf_start, _ma_stream_buf_length);
+#ifdef MP_AUDIO_STREAM_DEBUG
+    printf("callback: frameCount:%d _start:%d _length:%d\n", frameCount, _ma_stream_buf_start, _ma_stream_buf_end);
 #endif
     // ignore if not enough waiting buffer remains
     if (_ma_stream_buf_end - _ma_stream_buf_start < frameCount + _ma_stream_keep_buf_size) {
@@ -35,8 +35,8 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 
 EXPORT
 int ma_stream_push(float* buf, int length) {
-#ifdef DEBUG
-    printf("push: length:%d _length:%d _start:%d\n", length, _ma_stream_buf_length, _ma_stream_buf_start);
+#ifdef DEMP_AUDIO_STREAM_DEBUGBUG
+    printf("push: length:%d _length:%d _start:%d\n", length, _ma_stream_buf_end, _ma_stream_buf_start);
     for (int i=0; i<100; i+=10) {
         for (int j=0; j<10; j++) {
             unsigned char *b = (unsigned char *)(&buf[i+j]);
@@ -92,7 +92,7 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
         return -4;
     }
 
-#ifdef DEBUG
+#ifdef MP_AUDIO_STREAM_DEBUG
     printf("Device Name: %s\n", _ma_stream_device.playback.name);
 #endif
 

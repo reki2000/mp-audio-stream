@@ -1,12 +1,18 @@
 #ifdef WIN32
     #define EXPORT extern "C" __declspec(dllexport)
-#else
+    #define EXPORT extern
+#elif __cplusplus
     #define EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
+    #include <cstdio>
+    #include <cstdlib>
+    #include <cstring>
+#else //OBJC
+    #define EXPORT extern
+    #include "stdio.h"
+    #include "stdlib.h"
+    #include "string.h"
 #endif
 
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 
 EXPORT
 int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate);
