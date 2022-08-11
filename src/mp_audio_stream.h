@@ -1,12 +1,13 @@
+#ifdef __cplusplus
 #ifdef WIN32
     #define EXPORT extern "C" __declspec(dllexport)
-    #define EXPORT extern
-#elif __cplusplus
+#else
     #define EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
+#endif // WIN32
     #include <cstdio>
     #include <cstdlib>
     #include <cstring>
-#else //OBJC
+#else // __cplusplus - Objective-C or other C platform
     #define EXPORT extern
     #include "stdio.h"
     #include "stdlib.h"
