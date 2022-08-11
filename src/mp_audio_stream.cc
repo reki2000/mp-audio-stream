@@ -12,7 +12,6 @@ ma_uint32 _ma_stream_buf_end;
 ma_uint32 _ma_stream_buf_start;
 
 ma_uint32 _ma_stream_max_buf_size = 128 * 1024;
-ma_uint32 _ma_stream_keep_buf_size = 2 * 1024;
 
 ma_device _ma_stream_device;
 
@@ -23,14 +22,17 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 #ifdef MP_AUDIO_STREAM_DEBUG
     printf("callback: frameCount:%d _start:%d _length:%d\n", frameCount, _ma_stream_buf_start, _ma_stream_buf_end);
 #endif
-    // ignore if not enough waiting buffer remains
-    if (_ma_stream_buf_end - _ma_stream_buf_start < frameCount + _ma_stream_keep_buf_size) {
-        return;
+    ma_uint32 waiting_buf_size = _ma_stream_buf_end - _ma_stream_buf_start;
+    float * out = (float *)pOutput;
+
+    if (waiting_buf_size < frameCount) {
+        memcpy(out, &_ma_stream_buf[_ma_stream_buf_start], waiting_buf_size * sizeof(float));
+        memset(&out[waiting_buf_size], 0, (frameCount - waiting_buf_size) * sizeof(float));
+        _ma_stream_buf_start = _ma_stream_buf_end;
+    } else {
+        memcpy(out, &_ma_stream_buf[_ma_stream_buf_start], frameCount * sizeof(float));
+        _ma_stream_buf_start += frameCount;
     }
-
-    memcpy((float *)pOutput, &(_ma_stream_buf[_ma_stream_buf_start]), frameCount * sizeof(float));
-
-    _ma_stream_buf_start += frameCount;
 }
 
 EXPORT
@@ -97,7 +99,6 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
 #endif
 
     _ma_stream_max_buf_size = max_buffer_size;
-    _ma_stream_keep_buf_size = keep_buffer_size;
 
     if (_ma_stream_buf != NULL) {
         free(_ma_stream_buf);
