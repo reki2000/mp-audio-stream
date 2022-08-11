@@ -1,6 +1,6 @@
 name: mp_audio_stream
 description: A simple multi-platform audio stream player for raw audio data streams.
-version: 0.0.3
+version: 0.0.3+0
 repository: https://github.com/reki2000/mp-audio-stream
 
 environment:
@@ -25,6 +25,10 @@ flutter:
   plugin:
     platforms:
       android:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
+      ios:
         ffiPlugin: true
       linux:
         ffiPlugin: true
