@@ -12,13 +12,19 @@ typedef _MAInit = int Function(int, int, int, int);
 typedef _MAPushFunc = Int Function(Pointer<Float>, Int64);
 typedef _MAPush = int Function(Pointer<Float>, int);
 
-typedef _MAUninitFunc = Void Function();
-typedef _MAUninit = void Function();
+typedef _MAVoidFunc = Void Function();
+typedef _MAVoid = void Function();
+
+typedef _MAIntFunc = Int Function();
+typedef _MAInt = int Function();
 
 /// Contol class for AudioStream on "not" web platform. Use `getAudioStream()` to get its instance.
 class AudioStreamImpl implements AudioStream {
   late _MAPush _pushFfi;
-  late _MAUninit _uninitFfi;
+  late _MAVoid _uninitFfi;
+  late _MAInt _statExhaustCountFfi;
+  late _MAInt _statFullCountFfi;
+  late _MAVoid _statResetFfi;
 
   @override
   int init(
@@ -43,8 +49,20 @@ class AudioStreamImpl implements AudioStream {
         .asFunction<_MAPush>();
 
     _uninitFfi = dynLib
-        .lookup<NativeFunction<_MAUninitFunc>>("ma_stream_uninit")
-        .asFunction<_MAUninit>();
+        .lookup<NativeFunction<_MAVoidFunc>>("ma_stream_uninit")
+        .asFunction<_MAVoid>();
+
+    _statExhaustCountFfi = dynLib
+        .lookup<NativeFunction<_MAIntFunc>>("ma_stream_stat_exhaust_count")
+        .asFunction<_MAInt>();
+
+    _statFullCountFfi = dynLib
+        .lookup<NativeFunction<_MAIntFunc>>("ma_stream_stat_full_count")
+        .asFunction<_MAInt>();
+
+    _statResetFfi = dynLib
+        .lookup<NativeFunction<_MAVoidFunc>>("ma_stream_stat_reset")
+        .asFunction<_MAVoid>();
 
     return initFfi(bufferMilliSec * sampleRate ~/ 1000,
         waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate);
@@ -62,10 +80,20 @@ class AudioStreamImpl implements AudioStream {
   }
 
   @override
+  AudioStreamStat stat() {
+    return AudioStreamStat(_statFullCountFfi(), _statExhaustCountFfi());
+  }
+
+  @override
   void uninit() {
     _uninitFfi();
   }
 
   @override
   void resume() {}
+
+  @override
+  void resetStat() {
+    _statResetFfi();
+  }
 }
