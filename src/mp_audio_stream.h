@@ -23,3 +23,12 @@ void ma_stream_uninit();
 
 EXPORT
 int ma_stream_push(float*, int);
+
+EXPORT
+ma_uint32 ma_stream_stat_exhaust_count(); 
+
+EXPORT
+ma_uint32 ma_stream_stat_full_count(); 
+
+EXPORT
+void ma_stream_stat_reset();

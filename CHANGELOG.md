@@ -1,3 +1,8 @@
+## 0.1.1
+
+* add statistics about buffer exhaustion / full (not supported on web platform)
+* skip playing too short buffer to reduce click noises
+
 ## 0.1.0
 
 * iOS, macOS support
