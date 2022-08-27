@@ -5,7 +5,9 @@
 #include <chrono>
 #include <thread>
 
-#include <mp_audio_stream.h>
+#include "./miniaudio/miniaudio.h"
+
+#include "mp_audio_stream.h"
 
 int main() {
     ma_stream_init(128*1024, 2*1024, 1, 44100);
@@ -16,7 +18,7 @@ int main() {
 
     for (int freq=440; freq<441; freq+=5) {
         for (int j=0; j<bufLength; j++) {
-            buf[j] = (float)sin(2*M_PI * ((j*freq)%44100)/44100);
+            buf[j] = (float)sin(2* 3.14159265 * ((j*freq)%44100)/44100);
         }
         ma_stream_push(buf, bufLength);
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
