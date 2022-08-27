@@ -36,4 +36,5 @@ flutter:
         ffiPlugin: true
       web:
 
-
+  assets:
+    - packages/mp_audio_stream/js/audio_stream.js
