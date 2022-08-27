@@ -1,0 +1,25 @@
+<html>
+    <head>
+        <script src="audio_stream.js"></script>
+    </head>
+    <main>
+        <script>
+            const stream = window.AudioStream;
+
+            stream.init();
+            
+            function play() {
+                stream.resume();
+
+                const sineWave = []
+                const frequency = 440.0;
+                for (i=0; i<44100; i++) {
+                    sineWave[i] = Math.sin(2*3.1415*((i*frequency)%44100)/44100);
+                }
+
+                stream.push(sineWave);
+            }
+        </script>
+        <input type="button" onclick="play();" value="play"></input>
+    </main>
+</html>
