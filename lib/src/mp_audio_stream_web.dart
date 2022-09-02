@@ -72,5 +72,7 @@ class AudioStreamImpl extends AudioStream {
   }
 
   @override
-  void resetStat() {}
+  void resetStat() {
+    _stream?.callMethod('resetStat', []);
+  }
 }
