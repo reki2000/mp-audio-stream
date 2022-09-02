@@ -12,30 +12,20 @@ Future<String> _jsText() async =>
 
 /// Contol class for AudioStream on web platform. Use `getAudioStream()` to get its instance.
 class AudioStreamImpl extends AudioStream {
-  final _stream = Completer<js.JsObject>();
+  final _streamCompleter = Completer<js.JsObject>();
+  js.JsObject? _stream;
 
   AudioStreamImpl() {
     (() async {
       final scriptTag = html.ScriptElement()..text = await _jsText();
       html.document.head?.children.add(scriptTag);
-      _stream.complete(js.context['AudioStream']);
+      _stream = js.context['AudioStream'];
+      _streamCompleter.complete(_stream);
     })();
   }
 
-  void call(String method, List args) {
-    _stream.future.then((s) => s.callMethod(method, args));
-  }
-
-  @override
-  void resume() {
-    call('resume', []);
-  }
-
-  @override
-  int push(Float32List buf) {
-    // TODO: returns the result for calling `push`
-    call('push', [buf]);
-    return 0;
+  void _callLater(String method, List args) {
+    _streamCompleter.future.then((s) => s.callMethod(method, args));
   }
 
   @override
@@ -44,7 +34,7 @@ class AudioStreamImpl extends AudioStream {
       int waitingBufferMilliSec = 100,
       int channels = 1,
       int sampleRate = 44100}) {
-    call('init', [
+    _callLater('init', [
       bufferMilliSec * sampleRate / 1000,
       waitingBufferMilliSec * sampleRate / 1000,
       channels,
@@ -55,12 +45,30 @@ class AudioStreamImpl extends AudioStream {
 
   @override
   void uninit() {
-    call('uninit', []);
+    _callLater('uninit', []);
+  }
+
+  @override
+  void resume() {
+    _callLater('resume', []);
+  }
+
+  @override
+  int push(Float32List buf) {
+    _stream?.callMethod('push', [buf]);
+    return 0;
   }
 
   @override
   AudioStreamStat stat() {
-    return AudioStreamStat.empty();
+    if (_stream != null) {
+      final statJsObj = _stream!['stat'];
+      final fullCount = statJsObj['fullCount'];
+      final exhaustCount = statJsObj['exhaustCount'];
+      return AudioStreamStat(full: fullCount, exhaust: exhaustCount);
+    } else {
+      return AudioStreamStat.empty();
+    }
   }
 
   @override
