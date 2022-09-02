@@ -1,6 +1,6 @@
 name: mp_audio_stream
 description: A simple multi-platform audio stream player for raw audio data streams.
-version: 0.1.1
+version: 0.1.2
 repository: https://github.com/reki2000/mp-audio-stream
 
 environment:
