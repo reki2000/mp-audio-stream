@@ -19,16 +19,16 @@ EXPORT
 int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate);
 
 EXPORT
-void ma_stream_uninit();
+void ma_stream_uninit(void);
 
 EXPORT
 int ma_stream_push(float*, int);
 
 EXPORT
-ma_uint32 ma_stream_stat_exhaust_count(); 
+ma_uint32 ma_stream_stat_exhaust_count(void); 
 
 EXPORT
-ma_uint32 ma_stream_stat_full_count(); 
+ma_uint32 ma_stream_stat_full_count(void); 
 
 EXPORT
-void ma_stream_stat_reset();
+void ma_stream_stat_reset(void);

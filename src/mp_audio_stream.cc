@@ -9,21 +9,31 @@
 
 struct {
     ma_device device;
-    bool initialized = false;
+    bool initialized;
 
-    ma_uint32 buf_size = 128 * 1024;
+    ma_uint32 buf_size;
 
-    float *buf = NULL;
-    ma_uint32 buf_end = 0;
-    ma_uint32 buf_start = 0;
+    float *buf;
+    ma_uint32 buf_end;
+    ma_uint32 buf_start;
 
-    bool is_exhaust = false;
-    ma_uint32 exhaust_recover_size = 10 * 1024;
+    bool is_exhaust;
+    ma_uint32 exhaust_recover_size;
 
-    ma_uint32 exhaust_count = 0;
-    ma_uint32 full_count = 0;
+    ma_uint32 exhaust_count;
+    ma_uint32 full_count;
 
-} _ctx;
+} _ctx = {
+    .initialized = false,
+    .buf_size = 128 * 1024,
+    .buf = NULL,
+    .buf_end = 0,
+    .buf_start = 0,
+    .is_exhaust = false,
+    .exhaust_recover_size = 10 * 1024,
+    .exhaust_count = 0,
+    .full_count = 0
+};
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frame_count)
 {
@@ -56,7 +66,6 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     }
 }
 
-EXPORT
 int ma_stream_push(float* buf, int length) {
 #ifdef MP_AUDIO_STREAM_DEBUGB
     printf("push: length:%d _length:%d _start:%d\n", length, _ctx.buf_end, _ctx.buf_start);
