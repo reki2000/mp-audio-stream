@@ -1,3 +1,12 @@
+## 0.1.3
+
+- ios: fix broken build - initialize _ctx struct implicitly
+
+## 0.1.2
+
+* web: support statistics
+* web: refactor embedded string for JavaScript code to a asset
+
 ## 0.1.1
 
 * add statistics about buffer exhaustion / full (not supported on web platform)
