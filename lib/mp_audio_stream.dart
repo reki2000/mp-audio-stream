@@ -41,7 +41,7 @@ AudioStream getAudioStream() => AudioStreamImpl();
 class AudioStreamStat {
   final int full;
   final int exhaust;
-  AudioStreamStat(this.full, this.exhaust);
+  AudioStreamStat({required this.full, required this.exhaust});
 
-  factory AudioStreamStat.empty() => AudioStreamStat(0, 0);
+  factory AudioStreamStat.empty() => AudioStreamStat(full: 0, exhaust: 0);
 }

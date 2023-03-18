@@ -9,6 +9,7 @@
             stream.init();
             
             function play() {
+                stream.resetStat();
                 stream.resume();
 
                 const sineWave = []
@@ -18,6 +19,7 @@
                 }
 
                 stream.push(sineWave);
+                console.log(stream.stat);
             }
         </script>
         <input type="button" onclick="play();" value="play"></input>

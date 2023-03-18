@@ -81,7 +81,8 @@ class AudioStreamImpl implements AudioStream {
 
   @override
   AudioStreamStat stat() {
-    return AudioStreamStat(_statFullCountFfi(), _statExhaustCountFfi());
+    return AudioStreamStat(
+        full: _statFullCountFfi(), exhaust: _statExhaustCountFfi());
   }
 
   @override
