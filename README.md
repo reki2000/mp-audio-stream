@@ -1,13 +1,13 @@
 
-A Flutter plug-in for multi platform simple audio stream playback with real-time generated audio data streams
+A Flutter plugin for multi-platform, simple audio stream playback with real-time generated audio data streams
 
 ## Features
 
-- Plays buffered audio data in 44.1kHz continuously until the buffer becomes empty
+- Continuously plays buffered audio data at 44.1kHz until the buffer is empty
 - Supported format: float32 single-channel
-- Suppots all flutter platforms: Android, iOS, macOS, Linux, Windows and Web platforms
-  - Web platform is based on WebAudio and `AudioWorkletProcessor`
-  - Other platforms are based on [miniaudio](https://github.com/mackron/miniaudio.git), an amazing multi-platform audio library
+- Suppots all flutter platforms: Android, iOS, macOS, Linux, Windows, and Web platforms
+  - Web platform implementaion relies on WebAudio and `AudioWorkletProcessor`
+  - Other platforms utilize [miniaudio](https://github.com/mackron/miniaudio.git), an outstandig multi-platform audio library
 
 ## Getting started
 

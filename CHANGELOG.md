@@ -1,6 +1,11 @@
+## 0.1.4
+
+* bump miniaudio version
+* bump minimum flutter version to 3.0.0
+
 ## 0.1.3
 
-- ios: fix broken build - initialize _ctx struct implicitly
+* ios: fix broken build - initialize _ctx struct implicitly
 
 ## 0.1.2
 
