@@ -64,8 +64,8 @@ class AudioStreamImpl implements AudioStream {
         .lookup<NativeFunction<_MAVoidFunc>>("ma_stream_stat_reset")
         .asFunction<_MAVoid>();
 
-    return initFfi(bufferMilliSec * sampleRate ~/ 1000,
-        waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate);
+    return initFfi(channels * bufferMilliSec * sampleRate ~/ 1000,
+        channels * waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate);
   }
 
   @override

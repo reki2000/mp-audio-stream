@@ -4,7 +4,7 @@ A Flutter plugin for multi-platform, simple audio stream playback with real-time
 ## Features
 
 - Continuously plays buffered audio data at 44.1kHz until the buffer is empty
-- Supported format: float32 single-channel
+- Supported format: float32 multi-channel
 - Suppots all flutter platforms: Android, iOS, macOS, Linux, Windows, and Web platforms
   - Web platform implementaion relies on WebAudio and `AudioWorkletProcessor`
   - Other platforms utilize [miniaudio](https://github.com/mackron/miniaudio.git), an outstandig multi-platform audio library
@@ -27,18 +27,36 @@ import 'package:mp_audio_stream/mp_audio_stream.dart';
 void main() async {
   final audioStream = getAudioStream();
 
-  audioStream.init();
+  //default init params: {int bufferMilliSec = 3000,
+  //                      int waitingBufferMilliSec = 100,
+  //                      int channels = 1,
+  //                      int sampleRate = 44100}
+  audioStream.init( {channels: 2} ); //Call this from Flutter's State.initState() method
 
-  const freq = 440;
   const rate = 44100;
-  final sineWave = List.generate(
-      rate * 1, (i) => math.sin(2 * math.pi * ((i * freq) % rate) / rate));
+  const freqL = 440;
+  const freqR = 660;
+  const dur = 10;
+  Float32List samples = Float32List(rate);
 
-  audioStream.push(Float32List.fromList(sineWave));
+  audioStream.resume(); //For the web, call this after user interaction
 
-  await Future.delayed(const Duration(seconds: 2));
+  for (var t = 0; t < dur; t++) {
+    int pos = 0;
+    for (var i = 0; i < rate; i++) {
+      samples[pos++] = math.sin(2 * math.pi * ((i * freqL) % rate) / rate);
+      samples[pos++] = math.sin(2 * math.pi * ((i * freqR) % rate) / rate);
+      if (pos == samples.length) {
+        pos = 0;
+        audioStream.push(samples);
+      }
+    }
+    if (t > 0) {
+      await Future.delayed(const Duration(seconds: 1));
+    }
+  }
 
-  audioStream.uninit();
+  audioStream.uninit(); //Call this from Flutter's State.dispose()
 }
 ```
 
