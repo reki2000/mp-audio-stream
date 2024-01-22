@@ -31,7 +31,7 @@ void main() async {
   //                      int waitingBufferMilliSec = 100,
   //                      int channels = 1,
   //                      int sampleRate = 44100}
-  audioStream.init( {channels: 2} ); //Call this from Flutter's State.initState() method
+  audioStream.init(channels: 2); //Call this from Flutter's State.initState() method
 
   const rate = 44100;
   const freqL = 440;
