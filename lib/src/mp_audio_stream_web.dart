@@ -35,8 +35,8 @@ class AudioStreamImpl extends AudioStream {
       int channels = 1,
       int sampleRate = 44100}) {
     _callLater('init', [
-      bufferMilliSec * sampleRate / 1000,
-      waitingBufferMilliSec * sampleRate / 1000,
+      channels * bufferMilliSec * sampleRate / 1000,
+      channels * waitingBufferMilliSec * sampleRate / 1000,
       channels,
       sampleRate
     ]);

@@ -16,6 +16,8 @@ typedef struct {
     ma_uint32 buf_end;
     ma_uint32 buf_start;
 
+    ma_uint32 channels;
+
     bool is_exhaust;
     ma_uint32 exhaust_recover_size;
 
@@ -34,26 +36,26 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     float * out = (float *)pOutput;
 
     ma_uint32 plyable_size = _ctx->buf_end - _ctx->buf_start;
+    ma_uint32 samples = frame_count * _ctx->channels;
 
     if (_ctx->is_exhaust && _ctx->exhaust_recover_size > plyable_size) {
-        memset(out, 0, frame_count * sizeof(float));
+        memset(out, 0, samples * sizeof(float));
         _ctx->exhaust_count++;
         return;
     }
 
     _ctx->is_exhaust = false;
-
-    if (plyable_size < frame_count) {
+    if (plyable_size < samples) {
         // copy the buffer to the output, and fill the rest
         memcpy(out, &_ctx->buf[_ctx->buf_start], plyable_size * sizeof(float));
-        memset(&out[plyable_size], 0, (frame_count - plyable_size) * sizeof(float));
+        memset(&out[plyable_size], 0, (samples - plyable_size) * sizeof(float));
 
         _ctx->buf_start = _ctx->buf_end;
         _ctx->is_exhaust = true;
         _ctx->exhaust_count++;
     } else {
-        memcpy(out, &_ctx->buf[_ctx->buf_start], frame_count * sizeof(float));
-        _ctx->buf_start += frame_count;
+        memcpy(out, &_ctx->buf[_ctx->buf_start], samples * sizeof(float));
+        _ctx->buf_start += samples;
     }
 }
 
@@ -151,6 +153,8 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
     _ctx->buf = (float *)calloc(_ctx->buf_size, sizeof(float));
     _ctx->buf_end = 0;
     _ctx->buf_start = 0;
+
+    _ctx->channels = channels;
 
     if (ma_device_start(&_ctx->device) != MA_SUCCESS) {
         printf("Failed to start playback device.\n");
