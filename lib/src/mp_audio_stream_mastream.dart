@@ -6,16 +6,16 @@ import 'package:ffi/ffi.dart';
 
 import '../mp_audio_stream.dart';
 
-typedef _MAInitFunc = Int Function(Int64, Int64, Int64, Int64);
+typedef _MAInitFunc = Int64 Function(Int64, Int64, Int64, Int64);
 typedef _MAInit = int Function(int, int, int, int);
 
-typedef _MAPushFunc = Int Function(Pointer<Float>, Int64);
+typedef _MAPushFunc = Int64 Function(Pointer<Float>, Int64);
 typedef _MAPush = int Function(Pointer<Float>, int);
 
 typedef _MAVoidFunc = Void Function();
 typedef _MAVoid = void Function();
 
-typedef _MAIntFunc = Int Function();
+typedef _MAIntFunc = Int64 Function();
 typedef _MAInt = int Function();
 
 /// Contol class for AudioStream on "not" web platform. Use `getAudioStream()` to get its instance.

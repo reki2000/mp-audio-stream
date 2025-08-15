@@ -1,9 +1,21 @@
+
+// Uncomment the following line to enable debug logging
+// #define MP_AUDIO_STREAM_DEBUG
+
 #define MA_NO_DECODING
 #define MA_NO_ENCODING
 #define MINIAUDIO_IMPLEMENTATION
 #include "./miniaudio/miniaudio.h"
 
 #include "mp_audio_stream.h"
+
+#ifdef __ANDROID__
+  #include <android/log.h>
+  #define LOG_TAG "mp_audio_stream"
+  #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#else
+  #define LOGD printf
+#endif
 
 #define DEVICE_FORMAT       ma_format_f32
 
@@ -31,7 +43,7 @@ _ctx_t * _ctx = NULL;
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frame_count)
 {
 #ifdef MP_AUDIO_STREAM_DEBUG
-    printf("callback: frameCount:%d start:%d end:%d\n", frame_count, _ctx->buf_start, _ctx->buf_end);
+    LOGD("callback: frameCount:%d start:%d end:%d", frame_count, _ctx->buf_start, _ctx->buf_end);
 #endif
     float * out = (float *)pOutput;
 
@@ -59,9 +71,9 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     }
 }
 
-int ma_stream_push(float* buf, int length) {
-#ifdef MP_AUDIO_STREAM_DEBUGB
-    printf("push: length:%d _length:%d _start:%d\n", length, _ctx->buf_end, _ctx->buf_start);
+int64_t ma_stream_push(float* buf, int64_t length) {
+#ifdef MP_AUDIO_STREAM_DEBUG
+    LOGD("push: length:%lld _end:%d _start:%d\n", length, _ctx->buf_end, _ctx->buf_start);
     for (int i=0; i<100; i+=10) {
         for (int j=0; j<10; j++) {
             unsigned char *b = (unsigned char *)(&buf[i+j]);
@@ -92,11 +104,11 @@ int ma_stream_push(float* buf, int length) {
     return 0;
 }
 
-ma_uint32 ma_stream_stat_exhaust_count() {
+int64_t ma_stream_stat_exhaust_count() {
     return _ctx->exhaust_count;
 }
 
-ma_uint32 ma_stream_stat_full_count() {
+int64_t ma_stream_stat_full_count() {
     return _ctx->full_count;
 }
 
@@ -109,7 +121,7 @@ void ma_stream_uninit() {
     ma_device_uninit(&_ctx->device);
 }
 
-int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate)
+int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_t channels, int64_t sample_rate)
 {
     if (_ctx == NULL) {
         _ctx = (_ctx_t *)calloc(1,sizeof(_ctx_t));
@@ -135,12 +147,12 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
     deviceConfig.dataCallback      = data_callback;
 
     if (ma_device_init(NULL, &deviceConfig, &_ctx->device) != MA_SUCCESS) {
-        printf("Failed to open playback device.\n");
+        LOGD("Failed to open playback device.\n");
         return -4;
     }
 
 #ifdef MP_AUDIO_STREAM_DEBUG
-    printf("Device Name: %s\n", _ctx->device.playback.name);
+    LOGD("Device Name: %s\n", _ctx->device.playback.name);
 #endif
 
     _ctx->buf_size = max_buffer_size;
@@ -157,7 +169,7 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
     _ctx->channels = channels;
 
     if (ma_device_start(&_ctx->device) != MA_SUCCESS) {
-        printf("Failed to start playback device.\n");
+        LOGD("Failed to start playback device.\n");
         ma_device_uninit(&_ctx->device);
         return -5;
     }
