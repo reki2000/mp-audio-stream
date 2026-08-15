@@ -33,7 +33,8 @@ void main() async {
   //                      int sampleRate = 44100}
   audioStream.init(channels: 2); //Call this from Flutter's State.initState() method
 
-  //For web platform, call this after user interaction
+  // On web, call this after user interaction. On native platforms, call it
+  // after application resume or an output-device change.
   audioStream.resume(); 
 
   // generating a stereo sine-wave PCM stream

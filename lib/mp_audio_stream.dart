@@ -17,9 +17,9 @@ abstract class AudioStream {
   /// Release current audio stream.
   void uninit();
 
-  /// Resumes audio stream.
-  /// For web platform, you should call this from some user-action to activate `AudioContext`.
-  /// Ignored on platforms other than web, but recommended to call this to keep multi-platform ready.
+  /// Resumes or recovers the audio stream.
+  /// On web, call this from a user action to activate `AudioContext`. On native
+  /// platforms, call it after application resume or an output-device change.
   void resume();
 
   /// Pushes wave data (float32, -1.0 to 1.0) into audio stream. When buffer is full, the input is ignored.

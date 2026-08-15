@@ -1,3 +1,8 @@
+## Unreleased
+- native: use a thread-safe PCM ring buffer
+- native: recover stopped, interrupted, and rerouted playback devices
+- web: order initialization and resume, and report `AudioContext` state
+
 ## 0.2.2
 - web: fix 404 for audio_steram.js when deployed with --base-href
 
