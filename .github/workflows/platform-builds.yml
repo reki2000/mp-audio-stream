@@ -19,7 +19,7 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - run: flutter build apk --debug
+      - run: flutter build apk --debug --android-skip-build-dependency-validation
         working-directory: example
 
   ios:
