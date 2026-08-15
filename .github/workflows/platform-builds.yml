@@ -21,3 +21,17 @@ jobs:
       - run: flutter pub get
       - run: flutter build apk --debug
         working-directory: example
+
+  ios:
+    name: iOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build ios --debug --no-codesign
+        working-directory: example
