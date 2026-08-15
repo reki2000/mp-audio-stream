@@ -22,6 +22,7 @@ typedef _MAInt = int Function();
 class AudioStreamImpl implements AudioStream {
   late _MAPush _pushFfi;
   late _MAVoid _uninitFfi;
+  late _MAInt _resumeFfi;
   late _MAInt _statExhaustCountFfi;
   late _MAInt _statFullCountFfi;
   late _MAVoid _statResetFfi;
@@ -51,6 +52,10 @@ class AudioStreamImpl implements AudioStream {
     _uninitFfi = dynLib
         .lookup<NativeFunction<_MAVoidFunc>>("ma_stream_uninit")
         .asFunction<_MAVoid>();
+
+    _resumeFfi = dynLib
+        .lookup<NativeFunction<_MAIntFunc>>("ma_stream_resume")
+        .asFunction<_MAInt>();
 
     _statExhaustCountFfi = dynLib
         .lookup<NativeFunction<_MAIntFunc>>("ma_stream_stat_exhaust_count")
@@ -91,7 +96,9 @@ class AudioStreamImpl implements AudioStream {
   }
 
   @override
-  void resume() {}
+  void resume() {
+    _resumeFfi();
+  }
 
   @override
   void resetStat() {

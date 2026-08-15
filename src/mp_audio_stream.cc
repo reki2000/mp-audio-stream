@@ -10,6 +10,7 @@
 
 typedef struct {
     ma_device device;
+    ma_bool32 device_initialized;
 
     mp_audio_stream_buffer buffer;
 
@@ -20,40 +21,68 @@ typedef struct {
 
     ma_atomic_uint32 exhaust_count;
     ma_atomic_uint32 full_count;
+    ma_atomic_bool32 recovery_requested;
+
+    int max_buffer_size;
+    int keep_buffer_size;
+    int sample_rate;
 
 } _ctx_t;
 
 _ctx_t * _ctx = NULL;
 
-void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frame_count)
+static void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frame_count)
 {
+    _ctx_t* ctx = (_ctx_t*)pDevice->pUserData;
 #ifdef MP_AUDIO_STREAM_DEBUG
     printf(
         "callback: frameCount:%d available:%d\n",
         frame_count,
-        mp_audio_stream_buffer_available_read(&_ctx->buffer));
+        mp_audio_stream_buffer_available_read(&ctx->buffer));
 #endif
     float * out = (float *)pOutput;
 
-    ma_uint32 playable_frames = mp_audio_stream_buffer_available_read(&_ctx->buffer);
-    ma_uint32 samples = frame_count * _ctx->channels;
+    ma_uint32 playable_frames = mp_audio_stream_buffer_available_read(&ctx->buffer);
+    ma_uint32 samples = frame_count * ctx->channels;
 
-    if (_ctx->is_exhaust && _ctx->exhaust_recover_size > playable_frames) {
+    if (ctx->is_exhaust && ctx->exhaust_recover_size > playable_frames) {
         memset(out, 0, samples * sizeof(float));
-        ma_atomic_uint32_fetch_add(&_ctx->exhaust_count, 1);
+        ma_atomic_uint32_fetch_add(&ctx->exhaust_count, 1);
         return;
     }
 
-    _ctx->is_exhaust = false;
+    ctx->is_exhaust = false;
     ma_uint32 frames_read = mp_audio_stream_buffer_read(
-        &_ctx->buffer,
+        &ctx->buffer,
         out,
         frame_count);
     if (frames_read < frame_count) {
-        ma_uint32 samples_read = frames_read * _ctx->channels;
+        ma_uint32 samples_read = frames_read * ctx->channels;
         memset(&out[samples_read], 0, (samples - samples_read) * sizeof(float));
-        _ctx->is_exhaust = true;
-        ma_atomic_uint32_fetch_add(&_ctx->exhaust_count, 1);
+        ctx->is_exhaust = true;
+        ma_atomic_uint32_fetch_add(&ctx->exhaust_count, 1);
+    }
+}
+
+static void notification_callback(const ma_device_notification* notification)
+{
+    _ctx_t* ctx = (_ctx_t*)notification->pDevice->pUserData;
+    if (ctx == NULL) {
+        return;
+    }
+
+    switch (notification->type) {
+        case ma_device_notification_type_started:
+            ma_atomic_bool32_set(&ctx->recovery_requested, MA_FALSE);
+            break;
+        case ma_device_notification_type_stopped:
+        case ma_device_notification_type_rerouted:
+        case ma_device_notification_type_interruption_began:
+        case ma_device_notification_type_interruption_ended:
+            ma_atomic_bool32_set(&ctx->recovery_requested, MA_TRUE);
+            break;
+        default:
+            break;
     }
 }
 
@@ -75,6 +104,11 @@ int ma_stream_push(float* buf, int length) {
 
     if (_ctx == NULL || buf == NULL || _ctx->channels == 0 ||
         length < 0 || length % _ctx->channels != 0) {
+        return -1;
+    }
+
+    if (ma_atomic_bool32_get(&_ctx->recovery_requested) &&
+        ma_stream_resume() != 0) {
         return -1;
     }
 
@@ -107,9 +141,52 @@ void ma_stream_uninit() {
     if (_ctx == NULL) {
         return;
     }
-    ma_device_uninit(&_ctx->device);
+    if (_ctx->device_initialized) {
+        ma_device_uninit(&_ctx->device);
+        _ctx->device_initialized = MA_FALSE;
+    }
     mp_audio_stream_buffer_uninit(&_ctx->buffer);
     _ctx->channels = 0;
+    ma_atomic_bool32_set(&_ctx->recovery_requested, MA_FALSE);
+}
+
+int ma_stream_resume() {
+    if (_ctx == NULL || _ctx->channels == 0) {
+        return -1;
+    }
+
+    if (!_ctx->device_initialized) {
+        return ma_stream_init(
+            _ctx->max_buffer_size,
+            _ctx->keep_buffer_size,
+            _ctx->channels,
+            _ctx->sample_rate);
+    }
+
+    ma_device_state state = ma_device_get_state(&_ctx->device);
+    if (state == ma_device_state_started || state == ma_device_state_starting) {
+        ma_atomic_bool32_set(&_ctx->recovery_requested, MA_FALSE);
+        return 0;
+    }
+
+    if (state == ma_device_state_stopped) {
+        ma_pcm_rb_reset(&_ctx->buffer.buffer);
+        _ctx->is_exhaust = true;
+        if (ma_device_start(&_ctx->device) == MA_SUCCESS) {
+            ma_atomic_bool32_set(&_ctx->recovery_requested, MA_FALSE);
+            return 0;
+        }
+    }
+
+    int max_buffer_size = _ctx->max_buffer_size;
+    int keep_buffer_size = _ctx->keep_buffer_size;
+    int channels = _ctx->channels;
+    int sample_rate = _ctx->sample_rate;
+    return ma_stream_init(
+        max_buffer_size,
+        keep_buffer_size,
+        channels,
+        sample_rate);
 }
 
 int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate)
@@ -130,9 +207,17 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
         _ctx->exhaust_recover_size = 10 * 1024;
         ma_atomic_uint32_set(&_ctx->exhaust_count, 0);
         ma_atomic_uint32_set(&_ctx->full_count, 0);
-    } else {
+        ma_atomic_bool32_set(&_ctx->recovery_requested, MA_FALSE);
+    } else if (_ctx->device_initialized) {
         ma_device_uninit(&_ctx->device);
+        _ctx->device_initialized = MA_FALSE;
     }
+
+    _ctx->channels = channels;
+    _ctx->exhaust_recover_size = keep_buffer_size / channels;
+    _ctx->max_buffer_size = max_buffer_size;
+    _ctx->keep_buffer_size = keep_buffer_size;
+    _ctx->sample_rate = sample_rate;
 
     ma_device_config deviceConfig;
  
@@ -141,32 +226,36 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
     deviceConfig.playback.channels = channels;
     deviceConfig.sampleRate        = sample_rate;
     deviceConfig.dataCallback      = data_callback;
+    deviceConfig.notificationCallback = notification_callback;
+    deviceConfig.pUserData         = _ctx;
 
     if (ma_device_init(NULL, &deviceConfig, &_ctx->device) != MA_SUCCESS) {
         printf("Failed to open playback device.\n");
         return -4;
     }
+    _ctx->device_initialized = MA_TRUE;
 
 #ifdef MP_AUDIO_STREAM_DEBUG
     printf("Device Name: %s\n", _ctx->device.playback.name);
 #endif
-
-    _ctx->channels = channels;
-    _ctx->exhaust_recover_size = keep_buffer_size / channels;
 
     if (mp_audio_stream_buffer_init(
             &_ctx->buffer,
             max_buffer_size / channels,
             channels) != MA_SUCCESS) {
         ma_device_uninit(&_ctx->device);
+        _ctx->device_initialized = MA_FALSE;
         return -7;
     }
 
     if (ma_device_start(&_ctx->device) != MA_SUCCESS) {
         printf("Failed to start playback device.\n");
         ma_device_uninit(&_ctx->device);
+        _ctx->device_initialized = MA_FALSE;
         return -5;
     }
+
+    ma_atomic_bool32_set(&_ctx->recovery_requested, MA_FALSE);
 
     return 0;
 }

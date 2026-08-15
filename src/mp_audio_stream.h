@@ -22,6 +22,9 @@ EXPORT
 void ma_stream_uninit(void);
 
 EXPORT
+int ma_stream_resume(void);
+
+EXPORT
 int ma_stream_push(float*, int);
 
 EXPORT
