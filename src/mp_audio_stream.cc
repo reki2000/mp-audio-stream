@@ -89,7 +89,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 
 int64_t ma_stream_push(float* buf, int64_t length) {
 #ifdef MP_AUDIO_STREAM_DEBUGB
-    printf("push: length:%d available:%d\n", length, ma_pcm_rb_available_read(&_ctx->rb));
+    printf("push: length:%lld available:%u\n", (long long)length, ma_pcm_rb_available_read(&_ctx->rb));
     for (int i=0; i<100; i+=10) {
         for (int j=0; j<10; j++) {
             unsigned char *b = (unsigned char *)(&buf[i+j]);
