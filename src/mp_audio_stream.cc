@@ -32,10 +32,13 @@ typedef struct {
     float gain;
     float gain_step;
     float decay;
+    bool fade;
 
 } _ctx_t;
 
 _ctx_t * _ctx = NULL;
+
+static bool _fade_on_exhaust = true;
 
 // writes `frame_count` frames: the first `copy_frames` from the buffer (fading in),
 // and the rest by decaying the last output value toward zero
@@ -44,17 +47,22 @@ static void write_frames(float* out, ma_uint32 frame_count, ma_uint32 copy_frame
     const ma_uint32 channels = _ctx->channels;
     const float* in = &_ctx->buf[_ctx->buf_start];
 
+    // without fade: copy as is, and fill zero when exhausted
+    const bool fade = _ctx->fade;
+    const float decay = fade ? _ctx->decay : 0.0f;
+
     for (ma_uint32 f = 0; f < frame_count; f++) {
         if (f < copy_frames) {
+            const float gain = fade ? _ctx->gain : 1.0f;
             for (ma_uint32 c = 0; c < channels; c++) {
-                _ctx->last[c] = *in++ * _ctx->gain;
+                _ctx->last[c] = *in++ * gain;
                 *out++ = _ctx->last[c];
             }
             _ctx->gain += _ctx->gain_step;
             if (_ctx->gain > 1.0f) _ctx->gain = 1.0f;
         } else {
             for (ma_uint32 c = 0; c < channels; c++) {
-                _ctx->last[c] *= _ctx->decay;
+                _ctx->last[c] *= decay;
                 *out++ = _ctx->last[c];
             }
             _ctx->gain = 0.0f;
@@ -133,6 +141,13 @@ ma_uint32 ma_stream_stat_full_count() {
     return _ctx->full_count;
 }
 
+void ma_stream_set_fade_on_exhaust(int enabled) {
+    _fade_on_exhaust = enabled != 0;
+    if (_ctx != NULL) {
+        _ctx->fade = _fade_on_exhaust;
+    }
+}
+
 void ma_stream_stat_reset() {
     _ctx->full_count = 0;
     _ctx->exhaust_count = 0;
@@ -193,6 +208,7 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
     _ctx->gain = 0.0f;
     _ctx->gain_step = 1.0f / (FADE_SEC * sample_rate);
     _ctx->decay = expf(-1.0f / (FADE_SEC * sample_rate));
+    _ctx->fade = _fade_on_exhaust;
 
     if (ma_device_start(&_ctx->device) != MA_SUCCESS) {
         printf("Failed to start playback device.\n");

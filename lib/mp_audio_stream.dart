@@ -30,6 +30,10 @@ abstract class AudioStream {
 
   /// Resets all statistics as zero
   void resetStat();
+
+  /// Enables/disables short fade-out/in when the buffer is exhausted/recovered,
+  /// to avoid pop noise. Enabled by default.
+  void setFadeOnExhaust(bool enabled);
 }
 
 /// Returns an `AudioStream` instance for running platform (web/others)

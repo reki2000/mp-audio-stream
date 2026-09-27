@@ -14,6 +14,7 @@ extension type JSAudioStream(JSObject _) implements JSObject {
   external void push(JSFloat32Array buf);
   external JSAudioStreamStat get stat;
   external void resetStat();
+  external void setFadeOnExhaust(bool enabled);
 }
 
 extension type JSAudioStreamStat(JSObject _) implements JSObject {
@@ -94,5 +95,10 @@ class AudioStreamImpl extends mpaudio.AudioStream {
   @override
   void resetStat() {
     delay((s) => s.resetStat());
+  }
+
+  @override
+  void setFadeOnExhaust(bool enabled) {
+    delay((s) => s.setFadeOnExhaust(enabled));
   }
 }

@@ -43,6 +43,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   bool _isPlaying = false;
 
+  bool _fadeOnExhaust = true;
+
   @override
   void initState() {
     super.initState();
@@ -105,6 +107,18 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text("full: ${stat.full} exhaust:${stat.exhaust}"),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("fade on exhaust"),
+                Switch(
+                    value: _fadeOnExhaust,
+                    onChanged: (v) {
+                      audioStream.setFadeOnExhaust(v);
+                      setState(() => _fadeOnExhaust = v);
+                    }),
+              ],
+            ),
             ElevatedButton(
                 onPressed: _isPlaying ? null : _onPressed,
                 child: const Text(

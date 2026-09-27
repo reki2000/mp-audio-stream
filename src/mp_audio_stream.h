@@ -32,3 +32,6 @@ ma_uint32 ma_stream_stat_full_count(void);
 
 EXPORT
 void ma_stream_stat_reset(void);
+
+EXPORT
+void ma_stream_set_fade_on_exhaust(int enabled);

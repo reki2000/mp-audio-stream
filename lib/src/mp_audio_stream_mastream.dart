@@ -15,6 +15,9 @@ typedef _MAPush = int Function(Pointer<Float>, int);
 typedef _MAVoidFunc = Void Function();
 typedef _MAVoid = void Function();
 
+typedef _MASetIntFunc = Void Function(Int);
+typedef _MASetInt = void Function(int);
+
 typedef _MAIntFunc = Int Function();
 typedef _MAInt = int Function();
 
@@ -25,6 +28,7 @@ class AudioStreamImpl implements AudioStream {
   late _MAInt _statExhaustCountFfi;
   late _MAInt _statFullCountFfi;
   late _MAVoid _statResetFfi;
+  late _MASetInt _setFadeOnExhaustFfi;
 
   @override
   int init(
@@ -64,6 +68,10 @@ class AudioStreamImpl implements AudioStream {
         .lookup<NativeFunction<_MAVoidFunc>>("ma_stream_stat_reset")
         .asFunction<_MAVoid>();
 
+    _setFadeOnExhaustFfi = dynLib
+        .lookup<NativeFunction<_MASetIntFunc>>("ma_stream_set_fade_on_exhaust")
+        .asFunction<_MASetInt>();
+
     return initFfi(channels * bufferMilliSec * sampleRate ~/ 1000,
         channels * waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate);
   }
@@ -96,5 +104,10 @@ class AudioStreamImpl implements AudioStream {
   @override
   void resetStat() {
     _statResetFfi();
+  }
+
+  @override
+  void setFadeOnExhaust(bool enabled) {
+    _setFadeOnExhaustFfi(enabled ? 1 : 0);
   }
 }
