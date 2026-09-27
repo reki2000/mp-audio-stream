@@ -7,6 +7,9 @@
 
 #define DEVICE_FORMAT       ma_format_f32
 
+// fade duration to avoid pop noise when the buffer is exhausted / recovered
+#define FADE_SEC            0.005f
+
 typedef struct {
     ma_device device;
 
@@ -24,9 +27,40 @@ typedef struct {
     ma_uint32 exhaust_count;
     ma_uint32 full_count;
 
+    // for fade-out on exhaust and fade-in on recovery
+    float last[MA_MAX_CHANNELS];
+    float gain;
+    float gain_step;
+    float decay;
+
 } _ctx_t;
 
 _ctx_t * _ctx = NULL;
+
+// writes `frame_count` frames: the first `copy_frames` from the buffer (fading in),
+// and the rest by decaying the last output value toward zero
+static void write_frames(float* out, ma_uint32 frame_count, ma_uint32 copy_frames)
+{
+    const ma_uint32 channels = _ctx->channels;
+    const float* in = &_ctx->buf[_ctx->buf_start];
+
+    for (ma_uint32 f = 0; f < frame_count; f++) {
+        if (f < copy_frames) {
+            for (ma_uint32 c = 0; c < channels; c++) {
+                _ctx->last[c] = *in++ * _ctx->gain;
+                *out++ = _ctx->last[c];
+            }
+            _ctx->gain += _ctx->gain_step;
+            if (_ctx->gain > 1.0f) _ctx->gain = 1.0f;
+        } else {
+            for (ma_uint32 c = 0; c < channels; c++) {
+                _ctx->last[c] *= _ctx->decay;
+                *out++ = _ctx->last[c];
+            }
+            _ctx->gain = 0.0f;
+        }
+    }
+}
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frame_count)
 {
@@ -36,26 +70,25 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     float * out = (float *)pOutput;
 
     ma_uint32 plyable_size = _ctx->buf_end - _ctx->buf_start;
-    ma_uint32 samples = frame_count * _ctx->channels;
+    ma_uint32 plyable_frames = plyable_size / _ctx->channels;
 
     if (_ctx->is_exhaust && _ctx->exhaust_recover_size > plyable_size) {
-        memset(out, 0, samples * sizeof(float));
+        write_frames(out, frame_count, 0);
         _ctx->exhaust_count++;
         return;
     }
 
     _ctx->is_exhaust = false;
-    if (plyable_size < samples) {
-        // copy the buffer to the output, and fill the rest
-        memcpy(out, &_ctx->buf[_ctx->buf_start], plyable_size * sizeof(float));
-        memset(&out[plyable_size], 0, (samples - plyable_size) * sizeof(float));
+    if (plyable_frames < frame_count) {
+        // copy the buffer to the output, and fade out the rest
+        write_frames(out, frame_count, plyable_frames);
 
         _ctx->buf_start = _ctx->buf_end;
         _ctx->is_exhaust = true;
         _ctx->exhaust_count++;
     } else {
-        memcpy(out, &_ctx->buf[_ctx->buf_start], samples * sizeof(float));
-        _ctx->buf_start += samples;
+        write_frames(out, frame_count, frame_count);
+        _ctx->buf_start += frame_count * _ctx->channels;
     }
 }
 
@@ -155,6 +188,11 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
     _ctx->buf_start = 0;
 
     _ctx->channels = channels;
+
+    memset(_ctx->last, 0, sizeof(_ctx->last));
+    _ctx->gain = 0.0f;
+    _ctx->gain_step = 1.0f / (FADE_SEC * sample_rate);
+    _ctx->decay = expf(-1.0f / (FADE_SEC * sample_rate));
 
     if (ma_device_start(&_ctx->device) != MA_SUCCESS) {
         printf("Failed to start playback device.\n");
