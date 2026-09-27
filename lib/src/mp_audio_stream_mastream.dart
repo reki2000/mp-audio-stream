@@ -6,17 +6,14 @@ import 'package:ffi/ffi.dart';
 
 import '../mp_audio_stream.dart';
 
-typedef _MAInitFunc = Int Function(Int64, Int64, Int64, Int64);
-typedef _MAInit = int Function(int, int, int, int);
+typedef _MAInitFunc = Int Function(Int64, Int64, Int64, Int64, Int);
+typedef _MAInit = int Function(int, int, int, int, int);
 
 typedef _MAPushFunc = Int Function(Pointer<Float>, Int64);
 typedef _MAPush = int Function(Pointer<Float>, int);
 
 typedef _MAVoidFunc = Void Function();
 typedef _MAVoid = void Function();
-
-typedef _MASetIntFunc = Void Function(Int);
-typedef _MASetInt = void Function(int);
 
 typedef _MAIntFunc = Int Function();
 typedef _MAInt = int Function();
@@ -28,14 +25,14 @@ class AudioStreamImpl implements AudioStream {
   late _MAInt _statExhaustCountFfi;
   late _MAInt _statFullCountFfi;
   late _MAVoid _statResetFfi;
-  late _MASetInt _setFadeOnExhaustFfi;
 
   @override
   int init(
       {int bufferMilliSec = 3000,
       int waitingBufferMilliSec = 100,
       int channels = 1,
-      int sampleRate = 44100}) {
+      int sampleRate = 44100,
+      bool fadeOnExhaust = false}) {
     final dynLib = (Platform.isLinux || Platform.isAndroid)
         ? DynamicLibrary.open("libmp_audio_stream.so")
         : Platform.isWindows
@@ -68,12 +65,9 @@ class AudioStreamImpl implements AudioStream {
         .lookup<NativeFunction<_MAVoidFunc>>("ma_stream_stat_reset")
         .asFunction<_MAVoid>();
 
-    _setFadeOnExhaustFfi = dynLib
-        .lookup<NativeFunction<_MASetIntFunc>>("ma_stream_set_fade_on_exhaust")
-        .asFunction<_MASetInt>();
-
     return initFfi(channels * bufferMilliSec * sampleRate ~/ 1000,
-        channels * waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate);
+        channels * waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate,
+        fadeOnExhaust ? 1 : 0);
   }
 
   @override
@@ -104,10 +98,5 @@ class AudioStreamImpl implements AudioStream {
   @override
   void resetStat() {
     _statResetFfi();
-  }
-
-  @override
-  void setFadeOnExhaust(bool enabled) {
-    _setFadeOnExhaustFfi(enabled ? 1 : 0);
   }
 }

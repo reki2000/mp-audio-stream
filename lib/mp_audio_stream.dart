@@ -8,11 +8,14 @@ import 'src/mp_audio_stream_mastream.dart'
 abstract class AudioStream {
   /// Initializes an audio stream and starts to play. Returns 0 then scucess.
   /// Calling more than once makes a new AudioStream, the previous device will be `uninit`ed.
+  /// When `fadeOnExhaust` is true, the output fades out/in shortly (5ms) when the buffer
+  /// is exhausted/recovered, to avoid pop noise.
   int init(
       {int bufferMilliSec = 3000,
       int waitingBufferMilliSec = 100,
       int channels = 1,
-      int sampleRate = 44100});
+      int sampleRate = 44100,
+      bool fadeOnExhaust = false});
 
   /// Release current audio stream.
   void uninit();
@@ -30,10 +33,6 @@ abstract class AudioStream {
 
   /// Resets all statistics as zero
   void resetStat();
-
-  /// Enables/disables short fade-out/in when the buffer is exhausted/recovered,
-  /// to avoid pop noise. Enabled by default.
-  void setFadeOnExhaust(bool enabled);
 }
 
 /// Returns an `AudioStream` instance for running platform (web/others)

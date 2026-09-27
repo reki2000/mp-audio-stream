@@ -16,7 +16,7 @@
 
 
 EXPORT
-int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate);
+int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate, int fade_on_exhaust);
 
 EXPORT
 void ma_stream_uninit(void);
@@ -32,6 +32,3 @@ ma_uint32 ma_stream_stat_full_count(void);
 
 EXPORT
 void ma_stream_stat_reset(void);
-
-EXPORT
-void ma_stream_set_fade_on_exhaust(int enabled);

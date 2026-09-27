@@ -38,8 +38,6 @@ typedef struct {
 
 _ctx_t * _ctx = NULL;
 
-static bool _fade_on_exhaust = true;
-
 // writes `frame_count` frames: the first `copy_frames` from the buffer (fading in),
 // and the rest by decaying the last output value toward zero
 static void write_frames(float* out, ma_uint32 frame_count, ma_uint32 copy_frames)
@@ -141,13 +139,6 @@ ma_uint32 ma_stream_stat_full_count() {
     return _ctx->full_count;
 }
 
-void ma_stream_set_fade_on_exhaust(int enabled) {
-    _fade_on_exhaust = enabled != 0;
-    if (_ctx != NULL) {
-        _ctx->fade = _fade_on_exhaust;
-    }
-}
-
 void ma_stream_stat_reset() {
     _ctx->full_count = 0;
     _ctx->exhaust_count = 0;
@@ -157,7 +148,7 @@ void ma_stream_uninit() {
     ma_device_uninit(&_ctx->device);
 }
 
-int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate)
+int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate, int fade_on_exhaust)
 {
     if (_ctx == NULL) {
         _ctx = (_ctx_t *)calloc(1,sizeof(_ctx_t));
@@ -208,7 +199,7 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
     _ctx->gain = 0.0f;
     _ctx->gain_step = 1.0f / (FADE_SEC * sample_rate);
     _ctx->decay = expf(-1.0f / (FADE_SEC * sample_rate));
-    _ctx->fade = _fade_on_exhaust;
+    _ctx->fade = fade_on_exhaust != 0;
 
     if (ma_device_start(&_ctx->device) != MA_SUCCESS) {
         printf("Failed to start playback device.\n");
