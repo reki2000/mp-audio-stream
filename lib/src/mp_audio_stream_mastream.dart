@@ -6,8 +6,8 @@ import 'package:ffi/ffi.dart';
 
 import '../mp_audio_stream.dart';
 
-typedef _MAInitFunc = Int64 Function(Int64, Int64, Int64, Int64);
-typedef _MAInit = int Function(int, int, int, int);
+typedef _MAInitFunc = Int64 Function(Int64, Int64, Int64, Int64, Int64);
+typedef _MAInit = int Function(int, int, int, int, int);
 
 typedef _MAPushFunc = Int64 Function(Pointer<Float>, Int64);
 typedef _MAPush = int Function(Pointer<Float>, int);
@@ -31,7 +31,8 @@ class AudioStreamImpl implements AudioStream {
       {int bufferMilliSec = 3000,
       int waitingBufferMilliSec = 100,
       int channels = 1,
-      int sampleRate = 44100}) {
+      int sampleRate = 44100,
+      bool fadeOnExhaust = false}) {
     final dynLib = (Platform.isLinux || Platform.isAndroid)
         ? DynamicLibrary.open("libmp_audio_stream.so")
         : Platform.isWindows
@@ -65,7 +66,8 @@ class AudioStreamImpl implements AudioStream {
         .asFunction<_MAVoid>();
 
     return initFfi(channels * bufferMilliSec * sampleRate ~/ 1000,
-        channels * waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate);
+        channels * waitingBufferMilliSec * sampleRate ~/ 1000, channels, sampleRate,
+        fadeOnExhaust ? 1 : 0);
   }
 
   @override

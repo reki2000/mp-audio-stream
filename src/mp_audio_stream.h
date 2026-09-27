@@ -18,7 +18,7 @@
 
 
 EXPORT
-int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_t channels, int64_t sample_rate);
+int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_t channels, int64_t sample_rate, int64_t fade_on_exhaust);
 
 EXPORT
 void ma_stream_uninit(void);

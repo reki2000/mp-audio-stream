@@ -14,7 +14,7 @@
 
 int main()
 {
-  ma_stream_init(128 * 1024, 2 * 1024, 1, 44100);
+  ma_stream_init(128 * 1024, 2 * 1024, 1, 44100, 0);
 
   int bufLength = 44100;
 
