@@ -138,11 +138,11 @@ int64_t ma_stream_push(float* buf, int64_t length) {
     fflush(stdout);
 #endif
 
-    // reject partial frames, same as web
-    if (length % _ctx->channels != 0) {
+    // reject partial frames, same as web, and lengths beyond the buffer's 32-bit frame count
+    if (length < 0 || length % _ctx->channels != 0 || length / _ctx->channels > UINT32_MAX) {
         return -1;
     }
-    ma_uint32 frames = length / _ctx->channels;
+    ma_uint32 frames = (ma_uint32)(length / _ctx->channels);
 
     // ignore if no buffer remains
     if (ma_pcm_rb_available_write(&_ctx->rb) < frames) {
@@ -174,6 +174,17 @@ void ma_stream_uninit() {
 
 int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_t channels, int64_t sample_rate, int64_t fade_on_exhaust)
 {
+    // miniaudio takes 32-bit values, so reject the ones out of range
+    if (channels < 1 || channels > MA_MAX_CHANNELS
+        || sample_rate < 1 || sample_rate > UINT32_MAX
+        || max_buffer_size < channels || max_buffer_size > UINT32_MAX
+        || keep_buffer_size < 0 || keep_buffer_size > UINT32_MAX) {
+        printf("Invalid parameters.\n");
+        return -7;
+    }
+    const ma_uint32 ch = (ma_uint32)channels;
+    const ma_uint32 rate = (ma_uint32)sample_rate;
+
     if (_ctx == NULL) {
         _ctx = (_ctx_t *)calloc(1,sizeof(_ctx_t));
 
@@ -190,8 +201,8 @@ int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_
  
     deviceConfig = ma_device_config_init(ma_device_type_playback);
     deviceConfig.playback.format   = DEVICE_FORMAT;
-    deviceConfig.playback.channels = channels;
-    deviceConfig.sampleRate        = sample_rate;
+    deviceConfig.playback.channels = ch;
+    deviceConfig.sampleRate        = rate;
     deviceConfig.dataCallback      = data_callback;
 
     if (ma_device_init(NULL, &deviceConfig, &_ctx->device) != MA_SUCCESS) {
@@ -203,7 +214,7 @@ int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_
     printf("Device Name: %s\n", _ctx->device.playback.name);
 #endif
 
-    _ctx->exhaust_recover_size = keep_buffer_size;
+    _ctx->exhaust_recover_size = (ma_uint32)keep_buffer_size;
 
     // the device is not started yet, so the callback does not touch the buffer here
     if (_ctx->rb_initialized) {
@@ -211,19 +222,19 @@ int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_
         _ctx->rb_initialized = false;
     }
 
-    if (ma_pcm_rb_init(DEVICE_FORMAT, channels, max_buffer_size / channels, NULL, NULL, &_ctx->rb) != MA_SUCCESS) {
+    if (ma_pcm_rb_init(DEVICE_FORMAT, ch, (ma_uint32)max_buffer_size / ch, NULL, NULL, &_ctx->rb) != MA_SUCCESS) {
         printf("Failed to allocate buffer.\n");
         ma_device_uninit(&_ctx->device);
         return -6;
     }
     _ctx->rb_initialized = true;
 
-    _ctx->channels = channels;
+    _ctx->channels = ch;
 
     memset(_ctx->last, 0, sizeof(_ctx->last));
     _ctx->gain = 0.0f;
-    _ctx->gain_step = 1.0f / (FADE_SEC * sample_rate);
-    _ctx->decay = expf(-1.0f / (FADE_SEC * sample_rate));
+    _ctx->gain_step = 1.0f / (FADE_SEC * (float)rate);
+    _ctx->decay = expf(-1.0f / (FADE_SEC * (float)rate));
     _ctx->fade = fade_on_exhaust != 0;
 
     if (ma_device_start(&_ctx->device) != MA_SUCCESS) {
