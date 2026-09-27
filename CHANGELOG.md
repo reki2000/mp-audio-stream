@@ -1,3 +1,7 @@
+## 0.2.3
+- fix data race and slow copy in audio buffers
+- ffi: match native function signatures to Dart Int64 declarations
+
 ## 0.2.2
 - web: fix 404 for audio_steram.js when deployed with --base-href
 
