@@ -1,3 +1,10 @@
+## 0.3.0
+- add `fadeOnExhaust` option to `init()` (default: false) to fade out/in shortly (5ms) when the buffer is exhausted/recovered, to avoid pop noise
+- breaking: classes implementing `AudioStream` need to accept the new `fadeOnExhaust` parameter in `init()`
+- native: `init()` returns -7 for out-of-range parameters (e.g. `channels: 0`, negative `waitingBufferMilliSec`)
+- native: fix int64_t to ma_uint32 conversion warnings on MSVC
+- web: `init()` closes the previous `AudioContext` when called more than once
+
 ## 0.2.3
 - fix data race and slow copy in audio buffers
 - ffi: match native function signatures to Dart Int64 declarations
