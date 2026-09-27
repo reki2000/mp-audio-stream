@@ -4,11 +4,13 @@
 #else
     #define EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
 #endif // WIN32
+    #include <cstdint>
     #include <cstdio>
     #include <cstdlib>
     #include <cstring>
 #else // __cplusplus - Objective-C or other C platform
     #define EXPORT extern
+    #include "stdint.h"
     #include "stdio.h"
     #include "stdlib.h"
     #include "string.h"
@@ -16,19 +18,19 @@
 
 
 EXPORT
-int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate, int fade_on_exhaust);
+int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_t channels, int64_t sample_rate, int64_t fade_on_exhaust);
 
 EXPORT
 void ma_stream_uninit(void);
 
 EXPORT
-int ma_stream_push(float*, int);
+int64_t ma_stream_push(float*, int64_t);
 
 EXPORT
-ma_uint32 ma_stream_stat_exhaust_count(void); 
+int64_t ma_stream_stat_exhaust_count(void);
 
 EXPORT
-ma_uint32 ma_stream_stat_full_count(void); 
+int64_t ma_stream_stat_full_count(void);
 
 EXPORT
 void ma_stream_stat_reset(void);

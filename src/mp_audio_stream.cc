@@ -13,11 +13,9 @@
 typedef struct {
     ma_device device;
 
-    ma_uint32 buf_size;
-
-    float *buf;
-    ma_uint32 buf_end;
-    ma_uint32 buf_start;
+    // lock-free single producer (push) / single consumer (data_callback) ring buffer
+    ma_pcm_rb rb;
+    bool rb_initialized;
 
     ma_uint32 channels;
 
@@ -38,22 +36,55 @@ typedef struct {
 
 _ctx_t * _ctx = NULL;
 
-// writes `frame_count` frames: the first `copy_frames` from the buffer (fading in),
-// and the rest by decaying the last output value toward zero
-static void write_frames(float* out, ma_uint32 frame_count, ma_uint32 copy_frames)
+// reads up to `frame_count` frames from the ring buffer, returns the number of frames read
+static ma_uint32 rb_read(float* out, ma_uint32 frame_count)
+{
+    ma_uint32 total = 0;
+    while (total < frame_count) {
+        ma_uint32 frames = frame_count - total;
+        void* p;
+        if (ma_pcm_rb_acquire_read(&_ctx->rb, &frames, &p) != MA_SUCCESS || frames == 0) {
+            break;
+        }
+        memcpy(&out[total * _ctx->channels], p, frames * _ctx->channels * sizeof(float));
+        ma_pcm_rb_commit_read(&_ctx->rb, frames);
+        total += frames;
+    }
+    return total;
+}
+
+// writes `frame_count` frames into the ring buffer (the caller checks the available space)
+static void rb_write(const float* in, ma_uint32 frame_count)
+{
+    ma_uint32 total = 0;
+    while (total < frame_count) {
+        ma_uint32 frames = frame_count - total;
+        void* p;
+        if (ma_pcm_rb_acquire_write(&_ctx->rb, &frames, &p) != MA_SUCCESS || frames == 0) {
+            break;
+        }
+        memcpy(p, &in[total * _ctx->channels], frames * _ctx->channels * sizeof(float));
+        ma_pcm_rb_commit_write(&_ctx->rb, frames);
+        total += frames;
+    }
+}
+
+// processes `frame_count` frames of `out` in place: the first `read_frames` frames,
+// already read from the ring buffer, are faded in, and the rest are filled by
+// decaying the last output value toward zero
+static void write_frames(float* out, ma_uint32 frame_count, ma_uint32 read_frames)
 {
     const ma_uint32 channels = _ctx->channels;
-    const float* in = &_ctx->buf[_ctx->buf_start];
 
-    // without fade: copy as is, and fill zero when exhausted
+    // without fade: keep as is, and fill zero when exhausted
     const bool fade = _ctx->fade;
     const float decay = fade ? _ctx->decay : 0.0f;
 
     for (ma_uint32 f = 0; f < frame_count; f++) {
-        if (f < copy_frames) {
+        if (f < read_frames) {
             const float gain = fade ? _ctx->gain : 1.0f;
             for (ma_uint32 c = 0; c < channels; c++) {
-                _ctx->last[c] = *in++ * gain;
+                _ctx->last[c] = *out * gain;
                 *out++ = _ctx->last[c];
             }
             _ctx->gain += _ctx->gain_step;
@@ -71,12 +102,11 @@ static void write_frames(float* out, ma_uint32 frame_count, ma_uint32 copy_frame
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frame_count)
 {
 #ifdef MP_AUDIO_STREAM_DEBUG
-    printf("callback: frameCount:%d start:%d end:%d\n", frame_count, _ctx->buf_start, _ctx->buf_end);
+    printf("callback: frameCount:%d available:%d\n", frame_count, ma_pcm_rb_available_read(&_ctx->rb));
 #endif
     float * out = (float *)pOutput;
 
-    ma_uint32 plyable_size = _ctx->buf_end - _ctx->buf_start;
-    ma_uint32 plyable_frames = plyable_size / _ctx->channels;
+    ma_uint32 plyable_size = ma_pcm_rb_available_read(&_ctx->rb) * _ctx->channels;
 
     if (_ctx->is_exhaust && _ctx->exhaust_recover_size > plyable_size) {
         write_frames(out, frame_count, 0);
@@ -85,22 +115,19 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     }
 
     _ctx->is_exhaust = false;
-    if (plyable_frames < frame_count) {
-        // copy the buffer to the output, and fade out the rest
-        write_frames(out, frame_count, plyable_frames);
+    ma_uint32 read_frames = rb_read(out, frame_count);
+    // fade in the read frames, and fade out the rest if any
+    write_frames(out, frame_count, read_frames);
 
-        _ctx->buf_start = _ctx->buf_end;
+    if (read_frames < frame_count) {
         _ctx->is_exhaust = true;
         _ctx->exhaust_count++;
-    } else {
-        write_frames(out, frame_count, frame_count);
-        _ctx->buf_start += frame_count * _ctx->channels;
     }
 }
 
-int ma_stream_push(float* buf, int length) {
+int64_t ma_stream_push(float* buf, int64_t length) {
 #ifdef MP_AUDIO_STREAM_DEBUGB
-    printf("push: length:%d _length:%d _start:%d\n", length, _ctx->buf_end, _ctx->buf_start);
+    printf("push: length:%lld available:%u\n", (long long)length, ma_pcm_rb_available_read(&_ctx->rb));
     for (int i=0; i<100; i+=10) {
         for (int j=0; j<10; j++) {
             unsigned char *b = (unsigned char *)(&buf[i+j]);
@@ -111,31 +138,28 @@ int ma_stream_push(float* buf, int length) {
     fflush(stdout);
 #endif
 
+    // reject partial frames, same as web
+    if (length % _ctx->channels != 0) {
+        return -1;
+    }
+    ma_uint32 frames = length / _ctx->channels;
+
     // ignore if no buffer remains
-    if (_ctx->buf_end - _ctx->buf_start + length > _ctx->buf_size) {
+    if (ma_pcm_rb_available_write(&_ctx->rb) < frames) {
         _ctx->full_count++;
         return -1;
     }
 
-    // move the waiting buffer to the head of the buffer, if needed
-    if (_ctx->buf_end + length > _ctx->buf_size) {
-        memcpy(_ctx->buf, &_ctx->buf[_ctx->buf_start], (_ctx->buf_end - _ctx->buf_start)*sizeof(float));
-        _ctx->buf_end -= _ctx->buf_start;
-        _ctx->buf_start = 0;
-    }
-
-    memcpy(&_ctx->buf[_ctx->buf_end], buf, length * sizeof(float));
-
-    _ctx->buf_end += length;
+    rb_write(buf, frames);
 
     return 0;
 }
 
-ma_uint32 ma_stream_stat_exhaust_count() {
+int64_t ma_stream_stat_exhaust_count() {
     return _ctx->exhaust_count;
 }
 
-ma_uint32 ma_stream_stat_full_count() {
+int64_t ma_stream_stat_full_count() {
     return _ctx->full_count;
 }
 
@@ -148,15 +172,12 @@ void ma_stream_uninit() {
     ma_device_uninit(&_ctx->device);
 }
 
-int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int sample_rate, int fade_on_exhaust)
+int64_t ma_stream_init(int64_t max_buffer_size, int64_t keep_buffer_size, int64_t channels, int64_t sample_rate, int64_t fade_on_exhaust)
 {
     if (_ctx == NULL) {
         _ctx = (_ctx_t *)calloc(1,sizeof(_ctx_t));
 
-        _ctx->buf_size = 128 * 1024;
-        _ctx->buf = NULL;
-        _ctx->buf_end = 0;
-        _ctx->buf_start = 0;
+        _ctx->rb_initialized = false;
         _ctx->is_exhaust = false;
         _ctx->exhaust_recover_size = 10 * 1024;
         _ctx->exhaust_count = 0;
@@ -182,16 +203,20 @@ int ma_stream_init(int max_buffer_size, int keep_buffer_size, int channels, int 
     printf("Device Name: %s\n", _ctx->device.playback.name);
 #endif
 
-    _ctx->buf_size = max_buffer_size;
     _ctx->exhaust_recover_size = keep_buffer_size;
 
-    if (_ctx->buf != NULL) {
-        free(_ctx->buf);
+    // the device is not started yet, so the callback does not touch the buffer here
+    if (_ctx->rb_initialized) {
+        ma_pcm_rb_uninit(&_ctx->rb);
+        _ctx->rb_initialized = false;
     }
 
-    _ctx->buf = (float *)calloc(_ctx->buf_size, sizeof(float));
-    _ctx->buf_end = 0;
-    _ctx->buf_start = 0;
+    if (ma_pcm_rb_init(DEVICE_FORMAT, channels, max_buffer_size / channels, NULL, NULL, &_ctx->rb) != MA_SUCCESS) {
+        printf("Failed to allocate buffer.\n");
+        ma_device_uninit(&_ctx->device);
+        return -6;
+    }
+    _ctx->rb_initialized = true;
 
     _ctx->channels = channels;
 
