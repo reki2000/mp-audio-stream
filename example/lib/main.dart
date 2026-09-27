@@ -43,8 +43,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
   bool _isPlaying = false;
 
-  /// whether to apply the DC-cut filter to NES-like (0..15) square waves
-  bool _dcCut = true;
+  /// whether to remove DC offset from the wave before pushing
+  bool _dcCut = false;
+
+  // DC-cut filter state, kept across pushes
+  double _dcXPrev = 0, _dcYPrev = 0;
 
   @override
   void initState() {
@@ -72,81 +75,47 @@ class _MyHomePageState extends State<MyHomePage> {
     return Float32List.fromList(sineWave);
   }
 
-  /// Synthesizes a NES-like 4-bit square wave: each sample is 0..15 (0 = silence)
-  static List<int> _synthNesSquareWave(
-      double freq, int sampleRate, Duration duration,
-      {int volume = 15}) {
-    final length = duration.inMilliseconds * sampleRate ~/ 1000;
-    return List.generate(
-        length, (i) => (i * freq * 2 ~/ sampleRate).isEven ? volume : 0);
-  }
-
-  /// Converts 0..15 DAC values to float samples.
-  /// Maps to 0.0..1.0 (silence = 0.0), then optionally removes DC offset
-  /// with a one-pole high-pass filter: y = x - x_prev + R * y_prev
-  static Float32List _dacToFloat(List<int> dac, bool dcCut) {
-    // cutoff ~35Hz; R depends on the sample rate
+  /// Removes DC offset in place with a one-pole high-pass filter (cutoff ~35Hz):
+  /// y = x - x_prev + R * y_prev
+  void _applyDcCut(Float32List wave) {
     final r = math.exp(-2 * math.pi * 35 / sampleRate);
-    double xPrev = 0, yPrev = 0;
-
-    final out = Float32List(dac.length);
-    for (int i = 0; i < dac.length; i++) {
-      final x = dac[i] / 15.0;
-      if (dcCut) {
-        final y = x - xPrev + r * yPrev;
-        xPrev = x;
-        yPrev = y;
-        out[i] = y;
-      } else {
-        out[i] = x;
-      }
+    for (int i = 0; i < wave.length; i++) {
+      final x = wave[i];
+      final y = x - _dcXPrev + r * _dcYPrev;
+      _dcXPrev = x;
+      _dcYPrev = y;
+      wave[i] = y;
     }
-    return out;
   }
 
-  Future<void> _play(Float32List wave) async {
+  void _onPressed() async {
     setState(() => _isPlaying = true);
+    _dcXPrev = 0;
+    _dcYPrev = 0;
 
     // for web, calling `resume()` from user-action is needed
     audioStream.resume();
 
+    const noteDuration = Duration(seconds: 1);
     const pushFreq = 60; // Hz
 
-    // push wave data to audio stream in specified interval (pushFreq)
-    const step = sampleRate ~/ pushFreq;
-    for (int pos = 0; pos < wave.length; pos += step) {
-      audioStream.push(wave.sublist(pos, math.min(wave.length, pos + step)));
+    for (double noteFreq in [261.626, 293.665, 329.628]) {
+      final wave = _synthSineWave(noteFreq, sampleRate, noteDuration);
+      if (_dcCut) {
+        _applyDcCut(wave);
+      }
 
-      setState(() => stat = audioStream.stat());
-      await Future.delayed(const Duration(seconds: 1) ~/ pushFreq);
+      // push wave data to audio stream in specified interval (pushFreq)
+      const step = sampleRate ~/ pushFreq;
+      for (int pos = 0; pos < wave.length; pos += step) {
+        audioStream.push(wave.sublist(pos, math.min(wave.length, pos + step)));
+
+        setState(() => stat = audioStream.stat());
+        await Future.delayed(noteDuration ~/ pushFreq);
+      }
     }
 
     setState(() => _isPlaying = false);
-  }
-
-  void _onPressed() {
-    const noteDuration = Duration(seconds: 1);
-
-    final wave = <double>[
-      for (double noteFreq in [261.626, 293.665, 329.628])
-        ..._synthSineWave(noteFreq, sampleRate, noteDuration)
-    ];
-    _play(Float32List.fromList(wave));
-  }
-
-  void _onPressedNes() {
-    const noteDuration = Duration(milliseconds: 300);
-    final rest = List.filled(200 * sampleRate ~/ 1000, 0); // 200ms silence
-
-    // notes separated by silence, to make DC-offset pops audible
-    final dac = <int>[
-      ...rest,
-      for (double noteFreq in [261.626, 293.665, 329.628, 349.228]) ...[
-        ..._synthNesSquareWave(noteFreq, sampleRate, noteDuration),
-        ...rest,
-      ]
-    ];
-    _play(_dacToFloat(dac, _dcCut));
   }
 
   @override
@@ -160,12 +129,6 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text("full: ${stat.full} exhaust:${stat.exhaust}"),
-            ElevatedButton(
-                onPressed: _isPlaying ? null : _onPressed,
-                child: const Text(
-                  'generate sine wave',
-                )),
-            const SizedBox(height: 32),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -176,9 +139,9 @@ class _MyHomePageState extends State<MyHomePage> {
               ],
             ),
             ElevatedButton(
-                onPressed: _isPlaying ? null : _onPressedNes,
+                onPressed: _isPlaying ? null : _onPressed,
                 child: const Text(
-                  'generate NES-like square wave (0..15)',
+                  'generate sine wave',
                 ))
           ],
         ),
