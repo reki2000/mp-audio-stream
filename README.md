@@ -79,3 +79,7 @@ Update miniaudio submodule after `git clone`.
 ```
 git submodule update --init
 ```
+
+## Sample app binaries
+
+The **Build binaries** GitHub Actions workflow builds the sample app for Android, iOS, Windows, macOS, Linux and Web. Download its artifacts for internal verification, then tag that exact successful commit to publish the same binaries to GitHub Releases without rebuilding. See [BINARY-DISTRIBUTION.md](BINARY-DISTRIBUTION.md) for the release process and optional signing secrets.

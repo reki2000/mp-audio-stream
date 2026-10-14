@@ -1,0 +1,142 @@
+name: Build binaries
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: binaries-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.47.5'
+  APP_DIR: example
+  VERSION_FILE: pubspec.yaml
+  ARTIFACT_NAME: mp_audio_stream-example
+
+jobs:
+  tests:
+    # Same-repository PRs already have an exact-commit push build.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s .github/scripts -p 'test_*.py'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter pub get && flutter test
+        working-directory: example
+
+  build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    name: Build ${{ matrix.target }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: android, arch: all, runner: ubuntu-22.04, sdk_arch: x64}
+          - {target: linux, arch: x64, runner: ubuntu-22.04, sdk_arch: x64}
+          - {target: linux, arch: arm64, runner: ubuntu-22.04-arm, sdk_arch: arm64}
+          - {target: windows, arch: x64, runner: windows-2022, sdk_arch: x64}
+          - {target: windows, arch: arm64, runner: windows-11-arm, sdk_arch: x64}
+          - {target: macos, arch: universal, runner: macos-15, sdk_arch: arm64}
+          - {target: ios, arch: arm64, runner: macos-15, sdk_arch: arm64}
+          - {target: ios-simulator, arch: arm64, runner: macos-15, sdk_arch: arm64}
+          - {target: web, arch: browser, runner: ubuntu-22.04, sdk_arch: x64}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate version
+        run: python .github/scripts/release.py metadata
+      - name: Install Linux build dependencies
+        if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libasound2-dev libstdc++-12-dev
+      - uses: actions/setup-java@v4
+        if: matrix.target == 'android'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          architecture: ${{ matrix.sdk_arch }}
+          cache: true
+          cache-key: 'flutter-:os:-${{ runner.arch }}-:channel:-:version:-:arch:'
+      - name: Bootstrap native Dart on Windows ARM64
+        if: matrix.target == 'windows' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          Remove-Item "$env:FLUTTER_ROOT\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
+          & "$env:FLUTTER_ROOT\bin\internal\update_dart_sdk.ps1"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dartVersion = dart --version 2>&1 | Out-String
+          Write-Output $dartVersion
+          if ($dartVersion -notmatch 'windows_arm64') { throw 'Expected native ARM64 Dart SDK' }
+      - name: Get application dependencies
+        run: flutter pub get
+        working-directory: ${{ env.APP_DIR }}
+      - name: Configure Android signing
+        if: matrix.target == 'android' && github.event_name != 'pull_request'
+        run: python .github/scripts/signing.py android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Configure iOS signing
+        if: matrix.target == 'ios' && github.event_name != 'pull_request'
+        run: python .github/scripts/signing.py ios
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+          IOS_EXPORT_OPTIONS_BASE64: ${{ secrets.IOS_EXPORT_OPTIONS_BASE64 }}
+      - name: Build and package
+        run: python .github/scripts/release.py build ${{ matrix.target }} ${{ matrix.arch }}
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}-${{ matrix.arch }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+      - name: Remove signing material
+        if: always() && matrix.target == 'ios'
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/app-signing.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db"
+          fi
+          rm -f "$RUNNER_TEMP/signing.p12" "$RUNNER_TEMP/signing.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist"
+      - name: Remove Android signing material
+        if: always() && matrix.target == 'android'
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/release.keystore"

@@ -1,0 +1,49 @@
+name: Release verified binaries
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish
+        required: true
+        type: string
+      build_run_id:
+        description: Verified Build binaries run ID (empty selects the latest successful run for the tagged commit)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  APP_DIR: example
+  VERSION_FILE: pubspec.yaml
+  ARTIFACT_NAME: mp_audio_stream-example
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Publish the previously verified CI artifacts
+        run: python .github/scripts/publish.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
