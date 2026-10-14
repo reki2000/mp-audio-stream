@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       build_run_id:
-        description: Verified Build binaries run ID (empty selects the latest successful run for the tagged commit)
+        description: Verified full build run ID (empty searches by tagged commit)
         required: false
         type: string
 
@@ -22,8 +22,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  APP_DIR: example
-  VERSION_FILE: pubspec.yaml
   ARTIFACT_NAME: mp_audio_stream-example
 
 jobs:
@@ -33,17 +31,96 @@ jobs:
     permissions:
       actions: read
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - name: Check the tag and retain published releases
+        id: source
+        shell: bash
+        run: |
+          version=$(awk '$1 == "version:" {gsub(/["\047]/, "", $2); sub(/\+.*/, "", $2); print $2; exit}' pubspec.yaml)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ && "$RELEASE_TAG" == "v$version" ]]
+          printf 'commit=%s\nversion=%s\n' "$(git rev-parse HEAD)" "$version" >> "$GITHUB_OUTPUT"
+          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null || true)" == false ]]; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Find the successful full CI build
+        id: find
+        if: steps.source.outputs.publish == 'true'
+        uses: dawidd6/action-download-artifact@eab87c9830c39eff17e5a6eadb20bfb4bc880477 # v27
         with:
-          python-version: '3.12'
-      - name: Publish the previously verified CI artifacts
-        run: python .github/scripts/publish.py
+          workflow: build-binaries.yaml
+          commit: ${{ inputs.build_run_id == '' && steps.source.outputs.commit || '' }}
+          run_id: ${{ inputs.build_run_id }}
+          workflow_conclusion: ${{ inputs.build_run_id == '' && 'success' || '' }}
+          name: full-build-success
+          search_artifacts: true
+          dry_run: true
+          if_no_artifact_found: fail
+      - name: Verify the CI commit, workflow and complete platform set
+        id: verified
+        if: steps.source.outputs.publish == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          FOUND_ARTIFACTS: ${{ steps.find.outputs.artifacts }}
+          COMMIT: ${{ steps.source.outputs.commit }}
+        with:
+          script: |
+            const found = JSON.parse(process.env.FOUND_ARTIFACTS);
+            if (found.length !== 1 || found[0].expired) throw new Error('Missing full-build completion artifact');
+            const runId = found[0].workflow_run.id;
+            const run = (await github.rest.actions.getWorkflowRun({...context.repo, run_id: runId})).data;
+            const workflow = (await github.rest.actions.getWorkflow({...context.repo, workflow_id: 'build-binaries.yaml'})).data;
+            if (run.head_sha !== process.env.COMMIT || run.workflow_id !== workflow.id || run.status !== 'completed' || run.conclusion !== 'success' ||
+                !(run.event === 'workflow_dispatch' || (run.event === 'push' && run.head_branch === 'main'))) throw new Error('Tag requires a successful full main/manual build of this exact commit');
+            const artifacts = (await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {...context.repo, run_id: runId}))
+              .filter(a => a.name.startsWith('release-'));
+            const expected = ['release-android-all', 'release-linux-x64', 'release-linux-arm64', 'release-windows-x64', 'release-windows-arm64', 'release-macos-universal', 'release-ios-arm64', 'release-ios-simulator-arm64', 'release-web-browser'];
+            if (artifacts.some(a => a.expired) || artifacts.map(a => a.name).sort().join() !== expected.sort().join()) throw new Error('Incomplete or expired CI binaries');
+            core.setOutput('run_id', runId);
+            core.setOutput('artifact_ids', artifacts.map(a => a.id).join(','));
+            require('fs').writeFileSync('BUILD-METADATA.json', JSON.stringify({tag: process.env.RELEASE_TAG, commit: run.head_sha, ci_run: run.html_url, artifacts}, null, 2) + '\n');
+      - name: Download the exact verified artifacts and validate their digests
+        if: steps.source.outputs.publish == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.verified.outputs.run_id }}
+          artifact-ids: ${{ steps.verified.outputs.artifact_ids }}
+          path: release-assets
+          digest-mismatch: error
+      - name: Check asset versions and generate release checksums
+        if: steps.source.outputs.publish == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          for directory in release-assets/release-*; do
+            for file in "$directory"/*; do
+              [[ -s "$file" && "$(basename "$file")" == "$ARTIFACT_NAME-$VERSION-"* ]]
+            done
+            (cd "$directory" && sha256sum *)
+          done > SHA256SUMS.txt
+      - name: Attach the verified binaries to a draft release
+        if: steps.source.outputs.publish == 'true'
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          draft: true
+          prerelease: ${{ contains(steps.source.outputs.version, '-') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/release-*/*
+            SHA256SUMS.txt
+            BUILD-METADATA.json
+      - name: Publish after every upload succeeds
+        if: steps.source.outputs.publish == 'true'
+        run: gh release edit "$RELEASE_TAG" --draft=false --verify-tag

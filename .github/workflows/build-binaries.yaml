@@ -2,8 +2,9 @@ name: Build binaries
 
 on:
   push:
-    branches: ['main', 'develop']
+    branches: [main, develop]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 permissions:
@@ -16,21 +17,22 @@ concurrency:
 env:
   FLUTTER_VERSION: '3.47.5'
   APP_DIR: example
-  VERSION_FILE: pubspec.yaml
   ARTIFACT_NAME: mp_audio_stream-example
 
 jobs:
-  scope:
+  version:
     runs-on: ubuntu-22.04
     outputs:
-      matrix: ${{ steps.select.outputs.matrix }}
+      version: ${{ steps.version.outputs.version }}
+      build_name: ${{ steps.version.outputs.build_name }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - id: select
-        name: Select the build platforms
-        run: python3 .github/scripts/build_matrix.py
+      - id: version
+        shell: bash
+        run: |
+          version=$(awk '$1 == "version:" {gsub(/["\047]/, "", $2); sub(/\+.*/, "", $2); print $2; exit}' pubspec.yaml)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          printf 'version=%s\nbuild_name=%s\n' "$version" "${version%%-*}" >> "$GITHUB_OUTPUT"
 
   tests:
     runs-on: ubuntu-22.04
@@ -39,36 +41,74 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - run: python -m unittest discover -s .github/scripts -p 'test_*.py'
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
           cache: true
       - run: flutter pub get
+      - run: flutter test
       - run: flutter pub get && flutter test
         working-directory: example
 
-  build:
-    needs: scope
+  web:
+    needs: version
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+        working-directory: ${{ env.APP_DIR }}
+      - name: Build portable WebAssembly and JavaScript bundle
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          flutter build web --wasm --release --base-href=/ --no-web-resources-cdn --build-name="$VERSION" --build-number="$GITHUB_RUN_NUMBER" --dart-define=APP_VERSION="$VERSION"
+          sed -i 's|<base href="/">|<base href="./">|' build/web/index.html
+          touch build/web/.nojekyll
+          mkdir -p "$GITHUB_WORKSPACE/release-assets"
+          (cd build/web && zip -qr "$GITHUB_WORKSPACE/release-assets/$ARTIFACT_NAME-$VERSION-web-browser.zip" .)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-web-browser
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+  native:
+    needs: version
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full')
     name: Build ${{ matrix.target }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
+      matrix:
+        include:
+          - {target: android, arch: all, runner: ubuntu-22.04, sdk_arch: x64}
+          - {target: linux, arch: x64, runner: ubuntu-22.04, sdk_arch: x64}
+          - {target: linux, arch: arm64, runner: ubuntu-22.04-arm, sdk_arch: arm64}
+          - {target: windows, arch: x64, runner: windows-2022, sdk_arch: x64}
+          - {target: windows, arch: arm64, runner: windows-11-arm, sdk_arch: x64}
+          - {target: macos, arch: universal, runner: macos-15, sdk_arch: arm64}
+          - {target: ios, arch: arm64, runner: macos-15, sdk_arch: arm64}
+          - {target: ios-simulator, arch: arm64, runner: macos-15, sdk_arch: arm64}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      BUILD_NAME: ${{ needs.version.outputs.build_name }}
+      ANDROID_SIGNING: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      IOS_SIGNING: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - name: Validate version
-        run: python .github/scripts/release.py metadata
       - name: Install Linux build dependencies
         if: matrix.target == 'linux'
         run: |
@@ -81,9 +121,8 @@ jobs:
           java-version: '17'
           cache: gradle
           cache-dependency-path: '${{ env.APP_DIR }}/android/**/*.gradle*'
-      - name: Cache the Linux ARM64 SDK
+      - uses: actions/cache@v4
         if: matrix.target == 'linux' && matrix.arch == 'arm64'
-        uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/flutter-arm64
           key: flutter-linux-arm64-${{ env.FLUTTER_VERSION }}
@@ -100,7 +139,6 @@ jobs:
         if: matrix.target != 'linux' || matrix.arch != 'arm64'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
           architecture: ${{ matrix.sdk_arch }}
           cache: true
           cache-key: 'flutter-:os:-${{ runner.arch }}-:channel:-:version:-:arch:'
@@ -111,31 +149,129 @@ jobs:
           Remove-Item "$env:FLUTTER_ROOT\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
           & "$env:FLUTTER_ROOT\bin\internal\update_dart_sdk.ps1"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $dartVersion = dart --version 2>&1 | Out-String
-          Write-Output $dartVersion
-          if ($dartVersion -notmatch 'windows_arm64') { throw 'Expected native ARM64 Dart SDK' }
-      - name: Get application dependencies
-        run: flutter pub get
+          if ((dart --version 2>&1 | Out-String) -notmatch 'windows_arm64') { throw 'Expected native ARM64 Dart SDK' }
+      - name: Validate optional signing configuration
+        if: matrix.target == 'android' || matrix.target == 'ios'
+        shell: bash
+        env:
+          ANY_ANDROID: ${{ github.event_name != 'pull_request' && (secrets.ANDROID_KEYSTORE_BASE64 != '' || secrets.ANDROID_KEYSTORE_PASSWORD != '' || secrets.ANDROID_KEY_ALIAS != '' || secrets.ANDROID_KEY_PASSWORD != '') }}
+          ALL_ANDROID: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
+          ANY_IOS: ${{ github.event_name != 'pull_request' && (secrets.IOS_CERTIFICATE_BASE64 != '' || secrets.IOS_CERTIFICATE_PASSWORD != '' || secrets.IOS_PROFILE_BASE64 != '' || secrets.IOS_EXPORT_OPTIONS_BASE64 != '') }}
+          ALL_IOS: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE_BASE64 != '' && secrets.IOS_CERTIFICATE_PASSWORD != '' && secrets.IOS_PROFILE_BASE64 != '' && secrets.IOS_EXPORT_OPTIONS_BASE64 != '' }}
+        run: |
+          if [[ "$ANY_ANDROID" != "$ALL_ANDROID" || "$ANY_IOS" != "$ALL_IOS" ]]; then
+            echo 'Configure all four signing secrets for each enabled platform.' >&2
+            exit 1
+          fi
+      - uses: apple-actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0
+        if: matrix.target == 'ios' && env.IOS_SIGNING == 'true'
+        with:
+          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      - uses: timheuer/base64-to-file@dfa5a5dd38803cb4f5c3a081eeb28e8362d43e9c # v2
+        if: matrix.target == 'ios' && env.IOS_SIGNING == 'true'
+        with:
+          fileName: signing.mobileprovision
+          encodedString: ${{ secrets.IOS_PROFILE_BASE64 }}
+      - uses: timheuer/base64-to-file@dfa5a5dd38803cb4f5c3a081eeb28e8362d43e9c # v2
+        if: matrix.target == 'ios' && env.IOS_SIGNING == 'true'
+        with:
+          fileName: ExportOptions.plist
+          encodedString: ${{ secrets.IOS_EXPORT_OPTIONS_BASE64 }}
+      - name: Configure the iOS provisioning profile
+        if: matrix.target == 'ios' && env.IOS_SIGNING == 'true'
+        shell: bash
+        run: |
+          security cms -D -i "$RUNNER_TEMP/signing.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")
+          team=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/profile.plist")
+          identifier=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
+          [[ "$identifier" != *'*'* ]]
+          profiles="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profiles"
+          cp "$RUNNER_TEMP/signing.mobileprovision" "$profiles/$uuid.mobileprovision"
+          printf '%s\n' "IOS_EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions.plist" \
+            "FLUTTER_XCODE_DEVELOPMENT_TEAM=$team" "FLUTTER_XCODE_PRODUCT_BUNDLE_IDENTIFIER=${identifier#*.}" \
+            'FLUTTER_XCODE_CODE_SIGN_STYLE=Manual' "FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER=$uuid" \
+            'FLUTTER_XCODE_CODE_SIGN_IDENTITY=Apple Distribution' >> "$GITHUB_ENV"
+      - run: flutter pub get
         working-directory: ${{ env.APP_DIR }}
-      - name: Configure Android signing
-        if: matrix.target == 'android' && github.event_name != 'pull_request'
-        run: python .github/scripts/signing.py android
+      - name: Build the native application
+        shell: bash
+        working-directory: ${{ env.APP_DIR }}
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      - name: Configure iOS signing
-        if: matrix.target == 'ios' && github.event_name != 'pull_request'
-        run: python .github/scripts/signing.py ios
+          TARGET: ${{ matrix.target }}
+        run: |
+          args=(--build-name="$BUILD_NAME" --build-number="$GITHUB_RUN_NUMBER" --dart-define=APP_VERSION="$VERSION")
+          case "$TARGET" in
+            android)
+              flutter build apk --release --split-per-abi "${args[@]}"
+              flutter build appbundle --release "${args[@]}" ;;
+            ios)
+              if [[ "$IOS_SIGNING" == true ]]; then
+                flutter build ipa --release --export-options-plist="$IOS_EXPORT_OPTIONS_PATH" "${args[@]}"
+              else
+                flutter build ios --release --no-codesign "${args[@]}"
+              fi ;;
+            ios-simulator) flutter build ios --simulator --debug --no-codesign "${args[@]}" ;;
+            macos)
+              flutter config --no-enable-macos-arm64-only
+              FLUTTER_XCODE_CODE_SIGNING_ALLOWED=NO flutter build macos --release "${args[@]}" ;;
+            *) flutter build "$TARGET" --release "${args[@]}" ;;
+          esac
+      - name: Prepare Android signing
+        id: test-key
+        if: matrix.target == 'android'
+        shell: bash
+        run: |
+          echo "BUILD_TOOLS_VERSION=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)" >> "$GITHUB_ENV"
+          if [[ "$ANDROID_SIGNING" != true ]]; then
+            key=$(base64 -w0 "$HOME/.android/debug.keystore")
+            echo "::add-mask::$key"
+            echo "key=$key" >> "$GITHUB_OUTPUT"
+          fi
+          zip -d "$APP_DIR/build/app/outputs/bundle/release/app-release.aab" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF'
+      - name: Sign Android APKs
+        if: matrix.target == 'android'
+        uses: r0adkll/sign-android-release@d5f8436b702872ad5cdb1e6e4d5c8b983d25a997 # Node 24 revision
+        with:
+          releaseDirectory: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk
+          signingKeyBase64: ${{ env.ANDROID_SIGNING == 'true' && secrets.ANDROID_KEYSTORE_BASE64 || steps.test-key.outputs.key }}
+          alias: ${{ env.ANDROID_SIGNING == 'true' && secrets.ANDROID_KEY_ALIAS || 'androiddebugkey' }}
+          keyStorePassword: ${{ env.ANDROID_SIGNING == 'true' && secrets.ANDROID_KEYSTORE_PASSWORD || 'android' }}
+          keyPassword: ${{ env.ANDROID_SIGNING == 'true' && secrets.ANDROID_KEY_PASSWORD || 'android' }}
+      - name: Sign Android app bundle
+        if: matrix.target == 'android'
+        uses: r0adkll/sign-android-release@d5f8436b702872ad5cdb1e6e4d5c8b983d25a997 # Node 24 revision
+        with:
+          releaseDirectory: ${{ env.APP_DIR }}/build/app/outputs/bundle/release
+          signingKeyBase64: ${{ env.ANDROID_SIGNING == 'true' && secrets.ANDROID_KEYSTORE_BASE64 || steps.test-key.outputs.key }}
+          alias: ${{ env.ANDROID_SIGNING == 'true' && secrets.ANDROID_KEY_ALIAS || 'androiddebugkey' }}
+          keyStorePassword: ${{ env.ANDROID_SIGNING == 'true' && secrets.ANDROID_KEYSTORE_PASSWORD || 'android' }}
+          keyPassword: ${{ env.ANDROID_SIGNING == 'true' && secrets.ANDROID_KEY_PASSWORD || 'android' }}
+      - name: Include the matching Visual C++ runtime
+        if: matrix.target == 'windows'
+        shell: pwsh
         env:
-          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
-          IOS_EXPORT_OPTIONS_BASE64: ${{ secrets.IOS_EXPORT_OPTIONS_BASE64 }}
-      - name: Build and package
-        run: python .github/scripts/release.py build ${{ matrix.target }} ${{ matrix.arch }}
-      - uses: actions/upload-artifact@v4
+          ARCH: ${{ matrix.arch }}
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $install = & $vswhere -latest -products '*' -property installationPath
+          $runtime = Get-ChildItem "$install/VC/Redist/MSVC/*/$env:ARCH/Microsoft.VC*.CRT" -Directory |
+            Sort-Object { [version]$_.Parent.Parent.Name } -Descending | Select-Object -First 1
+          if (!$runtime) { throw 'Visual C++ runtime was not found' }
+          $bundle = "$env:APP_DIR/build/windows/$env:ARCH/runner/Release"
+          Copy-Item "$($runtime.FullName)/*.dll" $bundle
+          foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll')) {
+            if (!(Test-Path "$bundle/$dll")) { throw "Missing $dll" }
+          }
+      - name: Package the native application
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+        run: bash .github/scripts/package.sh "$TARGET" "$ARCH"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ matrix.target }}-${{ matrix.arch }}
           path: release-assets/*
@@ -143,21 +279,33 @@ jobs:
           retention-days: 90
           compression-level: 0
       - name: Remove signing material
-        if: always() && matrix.target == 'ios'
+        if: always() && (matrix.target == 'android' || matrix.target == 'ios')
         shell: bash
         run: |
-          if [ -f "$RUNNER_TEMP/app-signing.keychain-db" ]; then
-            security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db"
+          rm -f "$APP_DIR/build/app/outputs/flutter-apk/signingKey.jks" "$APP_DIR/build/app/outputs/bundle/release/signingKey.jks"
+          rm -f "$RUNNER_TEMP/signing.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist" "$RUNNER_TEMP/profile.plist"
+          if [[ -n "${FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER:-}" ]]; then
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER.mobileprovision"
           fi
-          rm -f "$RUNNER_TEMP/signing.p12" "$RUNNER_TEMP/signing.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist"
-      - name: Remove Android signing material
-        if: always() && matrix.target == 'android'
-        shell: bash
-        run: rm -f "$RUNNER_TEMP/release.keystore"
+
+  complete:
+    needs: [tests, web, native]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo "$GITHUB_SHA" > full-build-success.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: full-build-success
+          path: full-build-success.txt
+          retention-days: 90
 
   pages:
-    needs: [tests, build]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    needs: [tests, web, native]
+    if: >-
+      !cancelled() && needs.tests.result == 'success' && needs.web.result == 'success' &&
+      (needs.native.result == 'success' || needs.native.result == 'skipped') &&
+      (github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')))
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     permissions:
@@ -167,12 +315,21 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-web-browser
           path: release-assets
-      - name: Publish stable or develop without rebuilding
-        run: python .github/scripts/pages.py
+      - name: Extract the verified Web archive
+        run: unzip -q release-assets/*.zip -d site
+      - name: Publish stable or develop (dry run for PRs)
+        uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4.9.0
+        with:
+          branch: gh-pages
+          folder: site
+          target-folder: ${{ github.ref_name == 'develop' && 'develop' || '' }}
+          clean: true
+          clean-exclude: |
+            develop
+            develop/**
+          force: false
+          dry-run: ${{ github.event_name == 'pull_request' }}

@@ -25,22 +25,10 @@ android {
         versionName = flutter.versionName
     }
 
-    signingConfigs {
-        def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
-        if (keystorePath) {
-            release {
-                storeFile file(keystorePath)
-                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-            }
-        }
-    }
-
     buildTypes {
         release {
-            // CI can use a persistent release key; local builds retain debug signing.
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.debug
+            // CI re-signs these artifacts with the configured release key.
+            signingConfig = signingConfigs.debug
         }
     }
 }
