@@ -9,6 +9,11 @@ name="$ARTIFACT_NAME-$VERSION-$target-$arch"
 mkdir -p "$output"
 
 case "$target" in
+  web)
+    sed -i 's|<base href="/">|<base href="./">|' "$build/web/index.html"
+    touch "$build/web/.nojekyll"
+    (cd "$build/web" && zip -qr "$output/$name.zip" .)
+    ;;
   android)
     signing=test-signed
     [[ "$ANDROID_SIGNING" != true ]] || signing=signed

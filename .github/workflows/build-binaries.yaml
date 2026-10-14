@@ -28,11 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: version
-        shell: bash
-        run: |
-          version=$(awk '$1 == "version:" {gsub(/["\047]/, "", $2); sub(/\+.*/, "", $2); print $2; exit}' pubspec.yaml)
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
-          printf 'version=%s\nbuild_name=%s\n' "$version" "${version%%-*}" >> "$GITHUB_OUTPUT"
+        run: bash .github/scripts/release.sh version
 
   tests:
     runs-on: ubuntu-22.04
@@ -63,16 +59,10 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-      - run: flutter pub get
-        working-directory: ${{ env.APP_DIR }}
-      - name: Build portable WebAssembly and JavaScript bundle
-        working-directory: ${{ env.APP_DIR }}
+      - name: Build and package the portable Web bundle
         run: |
-          flutter build web --wasm --release --base-href=/ --no-web-resources-cdn --build-name="$VERSION" --build-number="$GITHUB_RUN_NUMBER" --dart-define=APP_VERSION="$VERSION"
-          sed -i 's|<base href="/">|<base href="./">|' build/web/index.html
-          touch build/web/.nojekyll
-          mkdir -p "$GITHUB_WORKSPACE/release-assets"
-          (cd build/web && zip -qr "$GITHUB_WORKSPACE/release-assets/$ARTIFACT_NAME-$VERSION-web-browser.zip" .)
+          bash .github/scripts/build.sh web
+          bash .github/scripts/package.sh web browser
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-web-browser
@@ -102,17 +92,14 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
       BUILD_NAME: ${{ needs.version.outputs.build_name }}
+      TARGET: ${{ matrix.target }}
+      ARCH: ${{ matrix.arch }}
       ANDROID_SIGNING: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_BASE64 != '' }}
       IOS_SIGNING: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Install Linux build dependencies
-        if: matrix.target == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libasound2-dev libstdc++-12-dev
       - uses: actions/setup-java@v4
         if: matrix.target == 'android'
         with:
@@ -125,15 +112,10 @@ jobs:
         with:
           path: ${{ runner.temp }}/flutter-arm64
           key: flutter-linux-arm64-${{ env.FLUTTER_VERSION }}
-      - name: Set up Flutter on Linux ARM64
-        if: matrix.target == 'linux' && matrix.arch == 'arm64'
+      - name: Set up Linux dependencies and ARM64 Flutter
+        if: matrix.target == 'linux'
         shell: bash
-        run: |
-          if [ ! -d "$RUNNER_TEMP/flutter-arm64/.git" ]; then
-            git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter-arm64"
-          fi
-          echo "$RUNNER_TEMP/flutter-arm64/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/flutter-arm64/bin/flutter" --version
+        run: bash .github/scripts/setup-linux.sh
       - uses: subosito/flutter-action@v2
         if: matrix.target != 'linux' || matrix.arch != 'arm64'
         with:
@@ -144,11 +126,7 @@ jobs:
       - name: Bootstrap native Dart on Windows ARM64
         if: matrix.target == 'windows' && matrix.arch == 'arm64'
         shell: pwsh
-        run: |
-          Remove-Item "$env:FLUTTER_ROOT\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
-          & "$env:FLUTTER_ROOT\bin\internal\update_dart_sdk.ps1"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ((dart --version 2>&1 | Out-String) -notmatch 'windows_arm64') { throw 'Expected native ARM64 Dart SDK' }
+        run: ./.github/scripts/windows.ps1 bootstrap
       - name: Validate optional signing configuration
         if: matrix.target == 'android' || matrix.target == 'ios'
         shell: bash
@@ -157,11 +135,7 @@ jobs:
           ALL_ANDROID: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
           ANY_IOS: ${{ github.event_name != 'pull_request' && (secrets.IOS_CERTIFICATE_BASE64 != '' || secrets.IOS_CERTIFICATE_PASSWORD != '' || secrets.IOS_PROFILE_BASE64 != '' || secrets.IOS_EXPORT_OPTIONS_BASE64 != '') }}
           ALL_IOS: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE_BASE64 != '' && secrets.IOS_CERTIFICATE_PASSWORD != '' && secrets.IOS_PROFILE_BASE64 != '' && secrets.IOS_EXPORT_OPTIONS_BASE64 != '' }}
-        run: |
-          if [[ "$ANY_ANDROID" != "$ALL_ANDROID" || "$ANY_IOS" != "$ALL_IOS" ]]; then
-            echo 'Configure all four signing secrets for each enabled platform.' >&2
-            exit 1
-          fi
+        run: bash .github/scripts/signing.sh validate
       - uses: apple-actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0
         if: matrix.target == 'ios' && env.IOS_SIGNING == 'true'
         with:
@@ -180,57 +154,15 @@ jobs:
       - name: Configure the iOS provisioning profile
         if: matrix.target == 'ios' && env.IOS_SIGNING == 'true'
         shell: bash
-        run: |
-          security cms -D -i "$RUNNER_TEMP/signing.mobileprovision" > "$RUNNER_TEMP/profile.plist"
-          uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")
-          team=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/profile.plist")
-          identifier=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
-          [[ "$identifier" != *'*'* ]]
-          profiles="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$profiles"
-          cp "$RUNNER_TEMP/signing.mobileprovision" "$profiles/$uuid.mobileprovision"
-          printf '%s\n' "IOS_EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions.plist" \
-            "FLUTTER_XCODE_DEVELOPMENT_TEAM=$team" "FLUTTER_XCODE_PRODUCT_BUNDLE_IDENTIFIER=${identifier#*.}" \
-            'FLUTTER_XCODE_CODE_SIGN_STYLE=Manual' "FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER=$uuid" \
-            'FLUTTER_XCODE_CODE_SIGN_IDENTITY=Apple Distribution' >> "$GITHUB_ENV"
-      - run: flutter pub get
-        working-directory: ${{ env.APP_DIR }}
+        run: bash .github/scripts/signing.sh configure-ios
       - name: Build the native application
         shell: bash
-        working-directory: ${{ env.APP_DIR }}
-        env:
-          TARGET: ${{ matrix.target }}
-        run: |
-          args=(--build-name="$BUILD_NAME" --build-number="$GITHUB_RUN_NUMBER" --dart-define=APP_VERSION="$VERSION")
-          case "$TARGET" in
-            android)
-              flutter build apk --release --split-per-abi "${args[@]}"
-              flutter build appbundle --release "${args[@]}" ;;
-            ios)
-              if [[ "$IOS_SIGNING" == true ]]; then
-                flutter build ipa --release --export-options-plist="$IOS_EXPORT_OPTIONS_PATH" "${args[@]}"
-              else
-                flutter build ios --release --no-codesign "${args[@]}"
-              fi ;;
-            ios-simulator) flutter build ios --simulator --debug --no-codesign "${args[@]}" ;;
-            macos)
-              flutter config --no-enable-macos-arm64-only
-              FLUTTER_XCODE_CODE_SIGNING_ALLOWED=NO flutter build macos --release "${args[@]}" ;;
-            *) flutter build "$TARGET" --release "${args[@]}" ;;
-          esac
+        run: bash .github/scripts/build.sh "$TARGET"
       - name: Prepare Android signing
         id: test-key
         if: matrix.target == 'android'
         shell: bash
-        run: |
-          echo "BUILD_TOOLS_VERSION=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)" >> "$GITHUB_ENV"
-          if [[ "$ANDROID_SIGNING" != true ]]; then
-            keytool -genkeypair -keystore "$RUNNER_TEMP/test-signing.jks" -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 30 -dname 'CN=CI test key'
-            key=$(base64 -w0 "$RUNNER_TEMP/test-signing.jks")
-            echo "::add-mask::$key"
-            echo "key=$key" >> "$GITHUB_OUTPUT"
-          fi
-          zip -d "$APP_DIR/build/app/outputs/bundle/release/app-release.aab" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF' || [[ $? == 12 ]]
+        run: bash .github/scripts/signing.sh prepare-android
       - name: Sign Android APKs
         if: matrix.target == 'android'
         uses: r0adkll/sign-android-release@d5f8436b702872ad5cdb1e6e4d5c8b983d25a997 # Node 24 revision
@@ -252,24 +184,9 @@ jobs:
       - name: Include the matching Visual C++ runtime
         if: matrix.target == 'windows'
         shell: pwsh
-        env:
-          ARCH: ${{ matrix.arch }}
-        run: |
-          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
-          $install = & $vswhere -latest -products '*' -property installationPath
-          $runtime = Get-ChildItem "$install/VC/Redist/MSVC/*/$env:ARCH/Microsoft.VC*.CRT" -Directory |
-            Sort-Object { [version]$_.Parent.Parent.Name } -Descending | Select-Object -First 1
-          if (!$runtime) { throw 'Visual C++ runtime was not found' }
-          $bundle = "$env:APP_DIR/build/windows/$env:ARCH/runner/Release"
-          Copy-Item "$($runtime.FullName)/*.dll" $bundle
-          foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll')) {
-            if (!(Test-Path "$bundle/$dll")) { throw "Missing $dll" }
-          }
+        run: ./.github/scripts/windows.ps1 runtime
       - name: Package the native application
         shell: bash
-        env:
-          TARGET: ${{ matrix.target }}
-          ARCH: ${{ matrix.arch }}
         run: bash .github/scripts/package.sh "$TARGET" "$ARCH"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -281,12 +198,7 @@ jobs:
       - name: Remove signing material
         if: always() && (matrix.target == 'android' || matrix.target == 'ios')
         shell: bash
-        run: |
-          rm -f "$APP_DIR/build/app/outputs/flutter-apk/signingKey.jks" "$APP_DIR/build/app/outputs/bundle/release/signingKey.jks"
-          rm -f "$RUNNER_TEMP/test-signing.jks" "$RUNNER_TEMP/signing.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist" "$RUNNER_TEMP/profile.plist"
-          if [[ -n "${FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER:-}" ]]; then
-            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER.mobileprovision"
-          fi
+        run: bash .github/scripts/signing.sh cleanup
 
   complete:
     needs: [tests, web, native]
