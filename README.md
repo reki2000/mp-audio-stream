@@ -82,4 +82,6 @@ git submodule update --init
 
 ## Sample app binaries
 
-The **Build binaries** GitHub Actions workflow builds the sample app for Android, iOS, Windows, macOS, Linux and Web. Download its artifacts for internal verification, then tag that exact successful commit to publish the same binaries to GitHub Releases without rebuilding. See [BINARY-DISTRIBUTION.md](BINARY-DISTRIBUTION.md) for the release process and optional signing secrets.
+The **Build binaries** GitHub Actions workflow tests PRs and builds Web; merges to `main` and manual runs build the sample app for Android, iOS, Windows, macOS, Linux and Web. Download its artifacts for internal verification, then tag that exact successful full-build commit to publish the same binaries to GitHub Releases without rebuilding. See [BINARY-DISTRIBUTION.md](BINARY-DISTRIBUTION.md) for the release process and optional signing secrets.
+
+Web demos: [stable](https://reki2000.github.io/mp-audio-stream/) and [develop](https://reki2000.github.io/mp-audio-stream/develop/). These paths become available after a successful branch build and GitHub Pages setup.

@@ -8,8 +8,10 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from release import metadata, package, windows_runtime
+from release import metadata, package, windows_runtime, portable_web
 from publish import TARGETS, select_run, verify_assets
+from pages import replace_site, extract_site
+from build_matrix import BUILDS, select_matrix
 import hashlib
 import json
 
@@ -85,10 +87,10 @@ class ReleaseTests(unittest.TestCase):
             windows_runtime(bundle, "x64", self.root / "VS")
 
     def test_release_requires_an_exact_successful_branch_build(self):
-        runs = [{"id": 7, "head_sha": "other", "status": "completed", "conclusion": "success", "event": "push"},
-                {"id": 8, "head_sha": "verified", "status": "completed", "conclusion": "failure", "event": "push"},
+        runs = [{"id": 7, "head_sha": "other", "status": "completed", "conclusion": "success", "event": "push", "head_branch": "main"},
+                {"id": 8, "head_sha": "verified", "status": "completed", "conclusion": "failure", "event": "push", "head_branch": "main"},
                 {"id": 9, "head_sha": "verified", "status": "completed", "conclusion": "success", "event": "pull_request"},
-                {"id": 10, "head_sha": "verified", "status": "completed", "conclusion": "success", "event": "push"}]
+                {"id": 10, "head_sha": "verified", "status": "completed", "conclusion": "success", "event": "push", "head_branch": "main"}]
         self.assertEqual(select_run(runs, "verified")["id"], 10)
         with self.assertRaises(ValueError):
             select_run(runs, "verified", "9")
@@ -116,6 +118,61 @@ class ReleaseTests(unittest.TestCase):
         directory.mkdir()
         with self.assertRaises(ValueError):
             verify_assets(directory, "verified", 10, "1.2.3")
+
+    def test_web_uses_a_portable_relative_base(self):
+        index = self.file('index.html', b'<html><base href="/"></html>')
+        portable_web(index)
+        self.assertIn('<base href="./">', index.read_text())
+        with self.assertRaises(ValueError):
+            portable_web(index)
+
+    def test_stable_deployment_preserves_develop_and_removes_stale_assets(self):
+        tree = self.root / "pages"
+        self.file("pages/develop/index.html", b"development")
+        self.file("pages/old.js", b"stale")
+        self.file("pages/CNAME", b"custom.example")
+        self.file("site/index.html", b"stable")
+        replace_site(tree, self.root / "site", "main")
+        self.assertEqual((tree / "index.html").read_bytes(), b"stable")
+        self.assertEqual((tree / "develop/index.html").read_bytes(), b"development")
+        self.assertTrue((tree / "CNAME").exists())
+        self.assertFalse((tree / "old.js").exists())
+
+    def test_develop_deployment_preserves_stable_and_removes_old_develop_files(self):
+        tree = self.root / "pages"
+        self.file("pages/index.html", b"stable")
+        self.file("pages/develop/old.js", b"stale")
+        self.file("site/index.html", b"new development")
+        replace_site(tree, self.root / "site", "develop")
+        self.assertEqual((tree / "index.html").read_bytes(), b"stable")
+        self.assertEqual((tree / "develop/index.html").read_bytes(), b"new development")
+        self.assertFalse((tree / "develop/old.js").exists())
+
+    def test_pages_rejects_zip_path_traversal(self):
+        archive = self.root / "bad.zip"
+        with zipfile.ZipFile(archive, "w") as output:
+            output.writestr("../outside.js", "untrusted")
+        with self.assertRaises(ValueError):
+            extract_site(archive, self.root / "site")
+
+    def test_main_and_manual_runs_build_every_release_target(self):
+        self.assertEqual({(b['target'], b['arch']) for b in BUILDS}, TARGETS)
+        self.assertEqual(select_matrix('push', 'refs/heads/main'), BUILDS)
+        self.assertEqual(select_matrix('workflow_dispatch', 'refs/heads/feature'), BUILDS)
+
+    def test_normal_pr_and_develop_push_build_web_only(self):
+        for event, ref, changed in [('pull_request', 'refs/pull/1/merge', ['lib/main.dart']),
+                                    ('push', 'refs/heads/develop', [])]:
+            self.assertEqual([b['target'] for b in select_matrix(event, ref, changed)], ['web'])
+
+    def test_native_pr_changes_select_the_affected_platform(self):
+        builds = select_matrix('pull_request', 'refs/pull/1/merge', ['example/android/app/build.gradle'])
+        self.assertEqual({b['target'] for b in builds}, {'android', 'web'})
+        builds = select_matrix('pull_request', 'refs/pull/1/merge', ['ios/Classes/plugin.mm'])
+        self.assertEqual({b['target'] for b in builds}, {'ios', 'ios-simulator', 'web'})
+
+    def test_shared_native_source_changes_build_all_platforms(self):
+        self.assertEqual(select_matrix('pull_request', 'refs/pull/1/merge', ['src/audio.cc']), BUILDS)
 
 
 if __name__ == "__main__":

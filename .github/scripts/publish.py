@@ -23,9 +23,10 @@ def select_run(runs, commit, requested=""):
         if requested and str(run["id"]) != requested:
             continue
         if (run["head_sha"] == commit and run["status"] == "completed"
-                and run["conclusion"] == "success" and run["event"] in ("push", "workflow_dispatch")):
+                and run["conclusion"] == "success"
+                and (run["event"] == "workflow_dispatch" or (run["event"] == "push" and run.get("head_branch") == "main"))):
             return run
-    raise ValueError("No successful Build binaries run for this exact commit. Test a successful CI build before tagging it.")
+    raise ValueError("No successful full Build binaries run for this exact commit (main push or manual run). Test a successful CI build before tagging it.")
 
 
 def verify_assets(directory, commit, run_id, version):

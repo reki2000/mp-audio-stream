@@ -2,7 +2,7 @@ name: Build binaries
 
 on:
   push:
-    branches: ['**']
+    branches: ['main', 'develop']
   pull_request:
   workflow_dispatch:
 
@@ -20,9 +20,19 @@ env:
   ARTIFACT_NAME: mp_audio_stream-example
 
 jobs:
+  scope:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: select
+        name: Select the build platforms
+        run: python3 .github/scripts/build_matrix.py
+
   tests:
-    # Same-repository PRs already have an exact-commit push build.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -43,23 +53,13 @@ jobs:
         working-directory: example
 
   build:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    needs: scope
     name: Build ${{ matrix.target }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - {target: android, arch: all, runner: ubuntu-22.04, sdk_arch: x64}
-          - {target: linux, arch: x64, runner: ubuntu-22.04, sdk_arch: x64}
-          - {target: linux, arch: arm64, runner: ubuntu-22.04-arm, sdk_arch: arm64}
-          - {target: windows, arch: x64, runner: windows-2022, sdk_arch: x64}
-          - {target: windows, arch: arm64, runner: windows-11-arm, sdk_arch: x64}
-          - {target: macos, arch: universal, runner: macos-15, sdk_arch: arm64}
-          - {target: ios, arch: arm64, runner: macos-15, sdk_arch: arm64}
-          - {target: ios-simulator, arch: arm64, runner: macos-15, sdk_arch: arm64}
-          - {target: web, arch: browser, runner: ubuntu-22.04, sdk_arch: x64}
+      matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -154,3 +154,25 @@ jobs:
         if: always() && matrix.target == 'android'
         shell: bash
         run: rm -f "$RUNNER_TEMP/release.keystore"
+
+  pages:
+    needs: [tests, build]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: pages-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-web-browser
+          path: release-assets
+      - name: Publish stable or develop without rebuilding
+        run: python .github/scripts/pages.py

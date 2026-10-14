@@ -55,6 +55,14 @@ def digest_file(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def portable_web(index):
+    # Hash-based navigation and relative assets let the same verified bundle serve both Pages paths.
+    text = index.read_text()
+    if text.count('<base href="/">') != 1:
+        raise ValueError("Expected a single root base tag in the Flutter Web build")
+    index.write_text(text.replace('<base href="/">', '<base href="./">'))
+
+
 def windows_runtime(bundle, arch, install):
     candidates = list((install / "VC/Redist/MSVC").glob(f"*/{arch}/Microsoft.VC*.CRT"))
     if not candidates:
@@ -182,6 +190,7 @@ def build(root, target, arch):
         run(flutter, "build", "macos", "--release", *common, cwd=app, env=env)
     elif target == "web":
         run(flutter, "build", "web", "--wasm", "--release", "--base-href=/", "--no-web-resources-cdn", *common, cwd=app)
+        portable_web(app / "build/web/index.html")
     elif target in ("linux", "windows"):
         run(flutter, "build", target, "--release", *common, cwd=app)
     else:
