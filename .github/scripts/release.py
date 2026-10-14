@@ -112,9 +112,9 @@ def package(root, target, arch):
         plist = app_bundle / "Contents/Info.plist"
         import plistlib
         executable = plistlib.loads(plist.read_bytes())["CFBundleExecutable"]
-        run("lipo", "-verify_arch", "x86_64", "arm64", str(app_bundle / "Contents/MacOS" / executable))
+        run("lipo", str(app_bundle / "Contents/MacOS" / executable), "-verify_arch", "x86_64", "arm64")
         for framework in ("App.framework/App", "FlutterMacOS.framework/FlutterMacOS"):
-            run("lipo", "-verify_arch", "x86_64", "arm64", str(app_bundle / "Contents/Frameworks" / framework))
+            run("lipo", str(app_bundle / "Contents/Frameworks" / framework), "-verify_arch", "x86_64", "arm64")
         args = ["codesign", "--force", "--deep", "--sign", "-"]
         entitlements = app / "macos/Runner/Release.entitlements"
         if entitlements.is_file():

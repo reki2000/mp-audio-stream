@@ -79,7 +79,25 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+          cache-dependency-path: '${{ env.APP_DIR }}/android/**/*.gradle*'
+      - name: Cache the Linux ARM64 SDK
+        if: matrix.target == 'linux' && matrix.arch == 'arm64'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/flutter-arm64
+          key: flutter-linux-arm64-${{ env.FLUTTER_VERSION }}
+      - name: Set up Flutter on Linux ARM64
+        if: matrix.target == 'linux' && matrix.arch == 'arm64'
+        shell: bash
+        run: |
+          if [ ! -d "$RUNNER_TEMP/flutter-arm64/.git" ]; then
+            git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter-arm64"
+          fi
+          echo "$RUNNER_TEMP/flutter-arm64/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter-arm64/bin/flutter" --version
       - uses: subosito/flutter-action@v2
+        if: matrix.target != 'linux' || matrix.arch != 'arm64'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
@@ -117,10 +135,6 @@ jobs:
           IOS_EXPORT_OPTIONS_BASE64: ${{ secrets.IOS_EXPORT_OPTIONS_BASE64 }}
       - name: Build and package
         run: python .github/scripts/release.py build ${{ matrix.target }} ${{ matrix.arch }}
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}-${{ matrix.arch }}

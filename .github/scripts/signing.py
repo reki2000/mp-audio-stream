@@ -18,7 +18,7 @@ def export(values):
 
 
 def decode(name, path):
-    path.write_bytes(base64.b64decode(os.environ[name], validate=True))
+    path.write_bytes(base64.b64decode("".join(os.environ[name].split()), validate=True))
     path.chmod(0o600)
     return str(path)
 
@@ -38,7 +38,7 @@ if not all(present):
 temporary = Path(os.environ["RUNNER_TEMP"])
 if target == "android":
     path = decode("ANDROID_KEYSTORE_BASE64", temporary / "release.keystore")
-    export({"ANDROID_KEYSTORE_PATH": path})
+    export({"ANDROID_KEYSTORE_PATH": path, **{name: os.environ[name] for name in required[1:]}})
 else:
     certificate = decode("IOS_CERTIFICATE_BASE64", temporary / "signing.p12")
     profile = decode("IOS_PROFILE_BASE64", temporary / "signing.mobileprovision")

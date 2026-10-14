@@ -10,8 +10,12 @@ class FakeAudioStream implements AudioStream {
   int releaseCount = 0;
 
   @override
-  int init({int bufferMilliSec = 3000, int waitingBufferMilliSec = 100,
-      int channels = 1, int sampleRate = 44100, bool fadeOnExhaust = false}) {
+  int init(
+      {int bufferMilliSec = 3000,
+      int waitingBufferMilliSec = 100,
+      int channels = 1,
+      int sampleRate = 44100,
+      bool fadeOnExhaust = false}) {
     fadeSettings.add(fadeOnExhaust);
     return 0;
   }
