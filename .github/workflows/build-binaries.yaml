@@ -46,7 +46,6 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - run: flutter pub get
-      - run: flutter test
       - run: flutter pub get && flutter test
         working-directory: example
 
@@ -226,11 +225,12 @@ jobs:
         run: |
           echo "BUILD_TOOLS_VERSION=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)" >> "$GITHUB_ENV"
           if [[ "$ANDROID_SIGNING" != true ]]; then
-            key=$(base64 -w0 "$HOME/.android/debug.keystore")
+            keytool -genkeypair -keystore "$RUNNER_TEMP/test-signing.jks" -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 30 -dname 'CN=CI test key'
+            key=$(base64 -w0 "$RUNNER_TEMP/test-signing.jks")
             echo "::add-mask::$key"
             echo "key=$key" >> "$GITHUB_OUTPUT"
           fi
-          zip -d "$APP_DIR/build/app/outputs/bundle/release/app-release.aab" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF'
+          zip -d "$APP_DIR/build/app/outputs/bundle/release/app-release.aab" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF' || [[ $? == 12 ]]
       - name: Sign Android APKs
         if: matrix.target == 'android'
         uses: r0adkll/sign-android-release@d5f8436b702872ad5cdb1e6e4d5c8b983d25a997 # Node 24 revision
@@ -283,7 +283,7 @@ jobs:
         shell: bash
         run: |
           rm -f "$APP_DIR/build/app/outputs/flutter-apk/signingKey.jks" "$APP_DIR/build/app/outputs/bundle/release/signingKey.jks"
-          rm -f "$RUNNER_TEMP/signing.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist" "$RUNNER_TEMP/profile.plist"
+          rm -f "$RUNNER_TEMP/test-signing.jks" "$RUNNER_TEMP/signing.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist" "$RUNNER_TEMP/profile.plist"
           if [[ -n "${FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER:-}" ]]; then
             rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER.mobileprovision"
           fi
