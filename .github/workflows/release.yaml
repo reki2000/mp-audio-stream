@@ -26,7 +26,7 @@ jobs:
     permissions:
       actions: read
       contents: write
-    uses: reki2000/mp-build-tools/.github/workflows/release.yaml@9e65228211a0a772fd6b272cee681353df527b3c
+    uses: reki2000/mp-build-tools/.github/workflows/release.yaml@f67988b20a3a08b42f72ae30fbdb211a9b68e07b
     with:
       tag: ${{ inputs.tag || github.ref_name }}
       artifact-name: mp_audio_stream-example
