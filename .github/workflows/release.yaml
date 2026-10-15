@@ -36,7 +36,7 @@ jobs:
         with:
           ref: refs/tags/${{ inputs.tag || github.ref_name }}
           persist-credentials: false
-      - uses: reki2000/mp-build-tools/release-binaries@3f80a91fe7537eefb1c2dbe1cd5b5f3716c7492f
+      - uses: reki2000/mp-build-tools/release-binaries@7a1dea314cd5ed27e26ee8f5eb5d5221188531f4
         with:
           tag: ${{ inputs.tag || github.ref_name }}
           artifact-name: ${{ env.ARTIFACT_NAME }}

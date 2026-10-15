@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: reki2000/mp-build-tools/flutter-build@3f80a91fe7537eefb1c2dbe1cd5b5f3716c7492f
+      - uses: reki2000/mp-build-tools/flutter-build@7a1dea314cd5ed27e26ee8f5eb5d5221188531f4
         with:
           target: web
           app-directory: ${{ env.APP_DIR }}
@@ -70,21 +70,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: reki2000/mp-build-tools/flutter-build@3f80a91fe7537eefb1c2dbe1cd5b5f3716c7492f
+      - uses: reki2000/mp-build-tools/flutter-build@7a1dea314cd5ed27e26ee8f5eb5d5221188531f4
         with:
           target: ${{ matrix.target }}
           architecture: ${{ matrix.arch }}
           app-directory: ${{ env.APP_DIR }}
           artifact-name: ${{ env.ARTIFACT_NAME }}
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          android-keystore-base64: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_BASE64 || '' }}
-          android-keystore-password: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
-          android-key-alias: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEY_ALIAS || '' }}
-          android-key-password: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEY_PASSWORD || '' }}
-          ios-certificate-base64: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE_BASE64 || '' }}
-          ios-certificate-password: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE_PASSWORD || '' }}
-          ios-profile-base64: ${{ github.event_name != 'pull_request' && secrets.IOS_PROFILE_BASE64 || '' }}
-          ios-export-options-base64: ${{ github.event_name != 'pull_request' && secrets.IOS_EXPORT_OPTIONS_BASE64 || '' }}
+          android-keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          android-keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          android-key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          android-key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ios-certificate-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          ios-certificate-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          ios-profile-base64: ${{ secrets.IOS_PROFILE_BASE64 }}
+          ios-export-options-base64: ${{ secrets.IOS_EXPORT_OPTIONS_BASE64 }}
 
   complete:
     needs: [tests, web, native]
@@ -113,7 +113,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - uses: reki2000/mp-build-tools/deploy-pages@3f80a91fe7537eefb1c2dbe1cd5b5f3716c7492f
+      - uses: reki2000/mp-build-tools/deploy-pages@7a1dea314cd5ed27e26ee8f5eb5d5221188531f4
         with:
           target-folder: ${{ github.ref_name == 'develop' && 'develop' || '' }}
           dry-run: ${{ github.event_name == 'pull_request' }}
