@@ -68,15 +68,9 @@ Successful `main` builds publish the verified Web archive at https://reki2000.gi
 For a repository's first deployment, select **Settings > Pages > Build and deployment > Deploy from a branch**, then choose **gh-pages / (root)** once the first successful branch build creates `gh-pages`. The branch contains static output and `.nojekyll`, not application source. Existing branch-based Pages settings can be retained. All publication is performed by GitHub Actions; Codemagic is not needed.
 
 The two paths share the `reki2000.github.io` origin. Browser storage such as localStorage and IndexedDB is not isolated by URL path. Use different storage names or origins if development data must be isolated from stable data. These applications use hash-based navigation; a portable relative base assumes the site is opened at its directory URL with a trailing slash.
+
 ## Workflow maintenance
 
-Workflow YAML defines the triggers, job dependencies, runners and public Actions. Longer commands live in `.github/scripts/` and run from the repository root with the environment defined by the workflow.
+Workflow YAML defines the triggers, job dependencies, runners and application tests. Shared build, packaging, signing preparation, release verification and Pages commands live in [mp-build-tools](https://github.com/reki2000/mp-build-tools).
 
-| File | Responsibility |
-|---|---|
-| `build.sh` | Flutter dependency resolution and platform build commands |
-| `package.sh` | Portable Web bundle and native distribution archives |
-| `setup-linux.sh`, `windows.ps1` | Linux dependencies, ARM64 SDK bootstrap and Windows runtime DLLs |
-| `signing.sh` | Signing configuration checks, temporary files and cleanup |
-| `release.sh` | Version output, tag checks and release checksums |
-| `verify-release.cjs` | Exact CI commit, successful full build and complete artifact checks |
+Each shared Action is pinned to the same reviewed commit SHA. Update the pins together after the shared Action checks and this repository's full native/Web CI pass. No build or release helper scripts are duplicated in this repository.

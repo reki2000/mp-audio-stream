@@ -31,66 +31,13 @@ jobs:
     permissions:
       actions: read
       contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ inputs.tag || github.ref_name }}
           persist-credentials: false
-      - name: Check the tag and retain published releases
-        id: source
-        run: bash .github/scripts/release.sh check-tag
-      - name: Find the successful full CI build
-        id: find
-        if: steps.source.outputs.publish == 'true'
-        uses: dawidd6/action-download-artifact@eab87c9830c39eff17e5a6eadb20bfb4bc880477 # v27
+      - uses: reki2000/mp-build-tools/release-binaries@3f80a91fe7537eefb1c2dbe1cd5b5f3716c7492f
         with:
-          workflow: build-binaries.yaml
-          commit: ${{ inputs.build_run_id == '' && steps.source.outputs.commit || '' }}
-          run_id: ${{ inputs.build_run_id }}
-          workflow_conclusion: ${{ inputs.build_run_id == '' && 'success' || '' }}
-          name: full-build-success
-          search_artifacts: true
-          dry_run: true
-          if_no_artifact_found: fail
-      - name: Verify the CI commit, workflow and complete platform set
-        id: verified
-        if: steps.source.outputs.publish == 'true'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        env:
-          FOUND_ARTIFACTS: ${{ steps.find.outputs.artifacts }}
-          COMMIT: ${{ steps.source.outputs.commit }}
-        with:
-          script: await require('./.github/scripts/verify-release.cjs')({github, context, core});
-      - name: Download the exact verified artifacts and validate their digests
-        if: steps.source.outputs.publish == 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          github-token: ${{ github.token }}
-          run-id: ${{ steps.verified.outputs.run_id }}
-          artifact-ids: ${{ steps.verified.outputs.artifact_ids }}
-          path: release-assets
-          digest-mismatch: error
-      - name: Check asset versions and generate release checksums
-        if: steps.source.outputs.publish == 'true'
-        env:
-          VERSION: ${{ steps.source.outputs.version }}
-        run: bash .github/scripts/release.sh checksums
-      - name: Attach the verified binaries to a draft release
-        if: steps.source.outputs.publish == 'true'
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          draft: true
-          prerelease: ${{ contains(steps.source.outputs.version, '-') }}
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          files: |
-            release-assets/release-*/*
-            SHA256SUMS.txt
-            BUILD-METADATA.json
-      - name: Publish after every upload succeeds
-        if: steps.source.outputs.publish == 'true'
-        run: gh release edit "$RELEASE_TAG" --draft=false --verify-tag
+          tag: ${{ inputs.tag || github.ref_name }}
+          artifact-name: ${{ env.ARTIFACT_NAME }}
+          build-run-id: ${{ inputs.build_run_id }}
