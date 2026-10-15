@@ -14,106 +14,20 @@ concurrency:
   group: binaries-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  FLUTTER_VERSION: '3.47.5'
-  APP_DIR: example
-  ARTIFACT_NAME: mp_audio_stream-example
-
 jobs:
-  tests:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-      - run: flutter pub get
-      - run: flutter pub get && flutter test
-        working-directory: example
-
-  web:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: reki2000/mp-build-tools/flutter-build@7a1dea314cd5ed27e26ee8f5eb5d5221188531f4
-        with:
-          target: web
-          app-directory: ${{ env.APP_DIR }}
-          artifact-name: ${{ env.ARTIFACT_NAME }}
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-
-  native:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full')
-    name: Build ${{ matrix.target }} (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - {target: android, arch: all, runner: ubuntu-22.04}
-          - {target: linux, arch: x64, runner: ubuntu-22.04}
-          - {target: linux, arch: arm64, runner: ubuntu-22.04-arm}
-          - {target: windows, arch: x64, runner: windows-2022}
-          - {target: windows, arch: arm64, runner: windows-11-arm}
-          - {target: macos, arch: universal, runner: macos-15}
-          - {target: ios, arch: arm64, runner: macos-15}
-          - {target: ios-simulator, arch: arm64, runner: macos-15}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: reki2000/mp-build-tools/flutter-build@7a1dea314cd5ed27e26ee8f5eb5d5221188531f4
-        with:
-          target: ${{ matrix.target }}
-          architecture: ${{ matrix.arch }}
-          app-directory: ${{ env.APP_DIR }}
-          artifact-name: ${{ env.ARTIFACT_NAME }}
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          android-keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          android-keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          android-key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          android-key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ios-certificate-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-          ios-certificate-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          ios-profile-base64: ${{ secrets.IOS_PROFILE_BASE64 }}
-          ios-export-options-base64: ${{ secrets.IOS_EXPORT_OPTIONS_BASE64 }}
-
-  complete:
-    needs: [tests, web, native]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-22.04
-    steps:
-      - run: echo "$GITHUB_SHA" > full-build-success.txt
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: full-build-success
-          path: full-build-success.txt
-          retention-days: 90
-
-  pages:
-    needs: [tests, web, native]
-    if: >-
-      !cancelled() && needs.tests.result == 'success' && needs.web.result == 'success' &&
-      (needs.native.result == 'success' || needs.native.result == 'skipped') &&
-      (github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')))
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
+  ci:
     permissions:
       contents: write
-    concurrency:
-      group: pages-${{ github.repository }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: reki2000/mp-build-tools/deploy-pages@7a1dea314cd5ed27e26ee8f5eb5d5221188531f4
-        with:
-          target-folder: ${{ github.ref_name == 'develop' && 'develop' || '' }}
-          dry-run: ${{ github.event_name == 'pull_request' }}
+    uses: reki2000/mp-build-tools/.github/workflows/build.yaml@37439f9bb2e96da67895d445b990908c92990f89
+    with:
+      artifact-name: mp_audio_stream-example
+      app-directory: example
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+      IOS_EXPORT_OPTIONS_BASE64: ${{ secrets.IOS_EXPORT_OPTIONS_BASE64 }}

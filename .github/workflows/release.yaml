@@ -21,23 +21,13 @@ concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
-env:
-  ARTIFACT_NAME: mp_audio_stream-example
-
 jobs:
   release:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
     permissions:
       actions: read
       contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: refs/tags/${{ inputs.tag || github.ref_name }}
-          persist-credentials: false
-      - uses: reki2000/mp-build-tools/release-binaries@7a1dea314cd5ed27e26ee8f5eb5d5221188531f4
-        with:
-          tag: ${{ inputs.tag || github.ref_name }}
-          artifact-name: ${{ env.ARTIFACT_NAME }}
-          build-run-id: ${{ inputs.build_run_id }}
+    uses: reki2000/mp-build-tools/.github/workflows/release.yaml@37439f9bb2e96da67895d445b990908c92990f89
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+      artifact-name: mp_audio_stream-example
+      build-run-id: ${{ inputs.build_run_id }}
