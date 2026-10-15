@@ -18,7 +18,7 @@ jobs:
   ci:
     permissions:
       contents: write
-    uses: reki2000/mp-build-tools/.github/workflows/build.yaml@37439f9bb2e96da67895d445b990908c92990f89
+    uses: reki2000/mp-build-tools/.github/workflows/build.yaml@9e65228211a0a772fd6b272cee681353df527b3c
     with:
       artifact-name: mp_audio_stream-example
       app-directory: example
