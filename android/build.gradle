@@ -11,7 +11,7 @@ buildscript {
 
     dependencies {
 
-        classpath 'com.android.tools.build:gradle:7.1.2'
+        classpath 'com.android.tools.build:gradle:9.1.0'
     }
 }
 
@@ -27,7 +27,7 @@ apply plugin: 'com.android.library'
 android {
     namespace 'com.example.mp_audio_stream'
 
-    compileSdkVersion 31
+    compileSdkVersion 36
 
     // Bumping the plugin ndkVersion requires all clients of this plugin to bump
     // the version in their app and to download a newer version of the NDK.

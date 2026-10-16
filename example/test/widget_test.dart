@@ -1,27 +1,56 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'dart:typed_data';
 
 import 'package:audio_stream_example/main.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mp_audio_stream/mp_audio_stream.dart';
+
+class FakeAudioStream implements AudioStream {
+  final fadeSettings = <bool>[];
+  int releaseCount = 0;
+
+  @override
+  int init(
+      {int bufferMilliSec = 3000,
+      int waitingBufferMilliSec = 100,
+      int channels = 1,
+      int sampleRate = 44100,
+      bool fadeOnExhaust = false}) {
+    fadeSettings.add(fadeOnExhaust);
+    return 0;
+  }
+
+  @override
+  void uninit() => releaseCount++;
+
+  @override
+  void resume() {}
+
+  @override
+  int push(Float32List buf) => 0;
+
+  @override
+  AudioStreamStat stat() => AudioStreamStat.empty();
+
+  @override
+  void resetStat() {}
+}
 
 void main() {
-  testWidgets('Verify Platform version', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('initializes the stream, applies fade settings and releases it',
+      (tester) async {
+    final audio = FakeAudioStream();
+    await tester.pumpWidget(MyApp(audioStream: audio));
 
-    // Verify that platform version is retrieved.
-    expect(
-      find.byWidgetPredicate(
-        (Widget widget) => widget is Text &&
-                           widget.data!.startsWith('Running on:'),
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Audio Stream Demo'), findsOneWidget);
+    expect(find.text('generate sine wave'), findsOneWidget);
+    expect(audio.fadeSettings, [false]);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    expect(audio.fadeSettings, [false, true]);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(audio.releaseCount, 1);
   });
 }

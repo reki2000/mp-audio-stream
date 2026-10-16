@@ -10,7 +10,9 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({Key? key, this.audioStream}) : super(key: key);
+
+  final AudioStream? audioStream;
 
   // This widget is the root of your application.
   @override
@@ -20,15 +22,17 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Audio Stream Demo'),
+      home: MyHomePage(title: 'Audio Stream Demo', audioStream: audioStream),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key, required this.title}) : super(key: key);
+  const MyHomePage({Key? key, required this.title, this.audioStream})
+      : super(key: key);
 
   final String title;
+  final AudioStream? audioStream;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -48,7 +52,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    audioStream = getAudioStream();
+    audioStream = widget.audioStream ?? getAudioStream();
     _initAudioStream();
   }
 
